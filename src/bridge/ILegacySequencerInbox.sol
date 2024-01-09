@@ -7,6 +7,12 @@ pragma experimental ABIEncoderV2;
 import "./IBridge.sol";
 
 interface ILegacySequencerInbox {
+    // Contains the minimal arguments to get the data from a sequencer's
+    // addSequencerL2BatchFromOrigin tx
+    function addSequencerL2BatchFromOriginMinimal(uint256 sequenceNumber, bytes calldata data)
+        external;
+
+    // Old SequencerBatchDelivered event without the sequencer inbox address
     event SequencerBatchDelivered(
         uint256 indexed batchSequenceNumber,
         bytes32 indexed beforeAcc,
