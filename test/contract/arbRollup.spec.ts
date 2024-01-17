@@ -262,6 +262,8 @@ const setup = async () => {
 
   const maxFeePerGas = BigNumber.from('1000000000')
 
+  const dummyDataHashReader = '0x0000000000000000000000000000000000000089'
+  const dummyBlobBasefeeReader = '0x0000000000000000000000000000000000000090'
   const deployParams = {
     config: await getDefaultConfig(),
     batchPoster: await sequencer.getAddress(),
@@ -275,6 +277,8 @@ const setup = async () => {
     nativeToken: ethers.constants.AddressZero,
     deployFactoriesToL2: true,
     maxFeePerGasForRetryables: maxFeePerGas,
+    dataHashReader: dummyDataHashReader,
+    blobBasefeeReader: dummyBlobBasefeeReader,
   }
 
   const response = await rollupCreator.createRollup(deployParams, {
@@ -496,10 +500,8 @@ const impersonateAccount = (address: string) =>
     .then(() => ethers.getSigner(address))
 
 describe('ArbRollup', () => {
-  it('should deploy contracts', async function () {
+  it('should initialize contracts', async function () {
     accounts = await initializeAccounts()
-
-    await run('deploy', { tags: 'test' })
   })
 
   it('should initialize', async function () {

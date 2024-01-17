@@ -13,8 +13,18 @@ contract SequencerInboxStub is SequencerInbox {
         IBridge bridge_,
         address sequencer_,
         ISequencerInbox.MaxTimeVariation memory maxTimeVariation_,
-        uint256 maxDataSize_
-    ) SequencerInbox(bridge_, maxTimeVariation_, maxDataSize_) {
+        uint256 maxDataSize_,
+        IDataHashReader dataHashReader_,
+        IBlobBasefeeReader blobBasefeeReader_
+    )
+        SequencerInbox(
+            bridge_,
+            maxTimeVariation_,
+            maxDataSize_,
+            dataHashReader_,
+            blobBasefeeReader_
+        )
+    {
         isBatchPoster[sequencer_] = true;
     }
 
@@ -28,12 +38,11 @@ contract SequencerInboxStub is SequencerInbox {
         require(num == 0, "ALREADY_DELAYED_INIT");
         emit InboxMessageDelivered(num, initMsg);
         (bytes32 dataHash, IBridge.TimeBounds memory timeBounds) = formEmptyDataHash(1);
-        uint256 sequencerMessageCount = addSequencerL2BatchImpl(
+        (uint256 sequencerMessageCount, , , ) = bridge.enqueueSequencerMessage(
             dataHash,
             1,
             0,
             0,
-            1,
             timeBounds,
             IBridge.BatchDataLocation.NoData
         );

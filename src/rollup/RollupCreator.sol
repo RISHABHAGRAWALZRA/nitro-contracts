@@ -41,6 +41,8 @@ contract RollupCreator is Ownable {
         address nativeToken;
         bool deployFactoriesToL2;
         uint256 maxFeePerGasForRetryables;
+        IDataHashReader dataHashReader;
+        IBlobBasefeeReader blobBasefeeReader;
     }
 
     BridgeCreator public bridgeCreator;
@@ -102,6 +104,7 @@ contract RollupCreator is Ownable {
      *                          anyone can try to deploy factories and potentially burn the nonce 0 (ie. due to gas price spike when doing direct
      *                          L2 TX). That would mean we permanently lost capability to deploy deterministic factory at expected address.
      *          - maxFeePerGasForRetryables price bid for L2 execution.
+     *          - dataHashReader The address of the data hash reader used to read blob hashes
      * @return The address of the newly created rollup
      */
     function createRollup(RollupDeploymentParams memory deployParams)
@@ -127,7 +130,9 @@ contract RollupCreator is Ownable {
             address(rollup),
             deployParams.nativeToken,
             deployParams.config.sequencerInboxMaxTimeVariation,
-            deployParams.maxDataSize
+            deployParams.maxDataSize,
+            deployParams.dataHashReader,
+            deployParams.blobBasefeeReader
         );
 
         IChallengeManager challengeManager = IChallengeManager(

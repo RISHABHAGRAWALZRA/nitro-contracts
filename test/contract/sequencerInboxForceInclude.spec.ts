@@ -39,6 +39,7 @@ import {
   MessageDeliveredEvent,
 } from '../../build/types/src/bridge/Bridge'
 import { Signer } from 'ethers'
+import { Toolkit4844 } from './toolkit4844'
 import { data } from './batchData.json'
 
 const mineBlocks = async (count: number, timeDiffPerBlock = 14) => {
@@ -221,8 +222,9 @@ describe('SequencerInboxForceInclude', async () => {
     const admin = accounts[0]
     const adminAddr = await admin.getAddress()
     const user = accounts[1]
-    const rollupOwner = accounts[2]
-    const batchPoster = accounts[3]
+    const dummyRollup = accounts[2]
+    const rollupOwner = accounts[3]
+    const batchPoster = accounts[4]
 
     const rollupMockFac = (await ethers.getContractFactory(
       'RollupMock'
@@ -257,6 +259,9 @@ describe('SequencerInboxForceInclude', async () => {
       .connect(rollupOwner)
     await bridge.initialize(rollup.address)
 
+    const dataHashReader = await Toolkit4844.deployDataHashReader(admin)
+    const blobBasefeeReader = await Toolkit4844.deployBlobBasefeeReader(admin)
+
     const sequencerInboxFac = (await ethers.getContractFactory(
       'SequencerInbox'
     )) as SequencerInbox__factory
@@ -268,8 +273,16 @@ describe('SequencerInboxForceInclude', async () => {
         futureBlocks: 10,
         futureSeconds: 3000,
       },
-      117964
+      117964,
+      dataHashReader.address,
+      blobBasefeeReader.address
     )
+
+    await (
+      await sequencerInbox
+        .connect(rollupOwner)
+        .setIsBatchPoster(await batchPoster.getAddress(), true)
+    ).wait()
 
     const inbox = await inboxFac.attach(inboxProxy.address).connect(user)
 
@@ -296,10 +309,10 @@ describe('SequencerInboxForceInclude', async () => {
       messageTester,
       inboxProxy,
       inboxTemplate,
+      batchPoster,
       bridgeProxy,
       rollup,
       rollupOwner,
-      batchPoster,
     }
   }
 
