@@ -34,7 +34,7 @@ interface ISequencerInbox is IDelayedMessageProvider {
     /// @dev a keyset was invalidated
     event InvalidateKeyset(bytes32 indexed keysetHash);
 
-    /// @notice The total number of delated messages read in the bridge
+    /// @notice The total number of delayed messages read in the bridge
     /// @dev    We surface this here for backwards compatibility
     function totalDelayedMessagesRead() external view returns (uint256);
 
@@ -63,7 +63,16 @@ interface ISequencerInbox is IDelayedMessageProvider {
     }
 
     /// @notice Returns the max time variation settings for this sequencer inbox
-    function maxTimeVariation() external view returns (ISequencerInbox.MaxTimeVariation memory);
+    /// @dev    We return the tuple of uint256 instead of the MaxTimeVariation struct to maintain backwards compatibility
+    function maxTimeVariation()
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        );
 
     function dasKeySetInfo(bytes32) external view returns (bool, uint64);
 
