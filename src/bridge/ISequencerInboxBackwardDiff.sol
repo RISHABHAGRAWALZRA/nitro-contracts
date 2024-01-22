@@ -8,9 +8,54 @@ pragma experimental ABIEncoderV2;
 
 import "../libraries/IGasRefunder.sol";
 import "./IDelayedMessageProvider.sol";
-import "./IBridgeExtended.sol";
+import "./IBridge.sol";
 
 interface ISequencerInboxBackwardDiff is IDelayedMessageProvider {
+    struct BatchPosterData {
+        bool isBatchPoster;
+        uint64 maxBufferAndHappyPathValidUntilTimestamp;
+        uint64 maxBufferAndHappyPathValidUntilBlockNumber;
+    }
+
+    struct DelayHistory {
+        uint64 blockNumber;
+        uint64 timestamp;
+        uint64 delayBlocks;
+        uint64 delaySeconds;
+    }
+
+    struct DelayData {
+        uint64 delayBufferBlocks;
+        uint64 delayBufferSeconds;
+        uint64 happyPathValidUntilTimestamp;
+        uint64 happyPathValidUntilBlockNumber;
+    }
+
+    struct SequencerStatus {
+        uint64 replenishPooledSeconds;
+        uint64 replenishPooledBlocks;
+        uint64 happyPathTimestampSeqIndex;
+        uint64 happyPathBlockNumberSeqIndex;
+    }
+
+    struct DelayAccPreimage {
+        bytes32 beforeDelayedAcc;
+        uint8 kind;
+        address sender;
+        uint64 blockNumber;
+        uint64 blockTimestamp;
+        uint256 count;
+        uint256 baseFeeL1;
+        bytes32 messageDataHash;
+    }
+
+    struct InboxAccPreimage {
+        bytes32 beforeAccBeforeAcc;
+        bytes32 beforeAccDataHash;
+        bytes32 beforeAccDelayedAcc;
+        DelayAccPreimage delayedAccPreimage;
+    }
+
     /// @notice The maximum amount of time variation between a message being posted on the L1 and being executed on the L2
     /// @param delayBlocks The max amount of blocks in the past that a message can be received on L2
     /// @param futureBlocks The max amount of blocks in the future that a message can be received on L2
@@ -38,7 +83,7 @@ interface ISequencerInboxBackwardDiff is IDelayedMessageProvider {
     /// @dev    We surface this here for backwards compatibility
     function totalDelayedMessagesRead() external view returns (uint256);
 
-    function bridge() external view returns (IBridgeExtended);
+    function bridge() external view returns (IBridge);
 
     /// @dev The size of the batch header
     // solhint-disable-next-line func-name-mixedcase

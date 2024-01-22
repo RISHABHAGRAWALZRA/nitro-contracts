@@ -24,7 +24,7 @@ import {
     NotOwner,
     RollupNotChanged
 } from "../libraries/Error.sol";
-import "./IBridgeExtended.sol";
+import "./IBridge.sol";
 import "./IInboxBase.sol";
 import "./ISequencerInboxBackwardDiff.sol";
 import "../rollup/IRollupLogic.sol";
@@ -44,50 +44,7 @@ import "../libraries/ArbitrumChecker.sol";
  * sequencer within a time limit they can be force included into the rollup inbox by anyone.
  */
 contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackwardDiff {
-    struct BatchPosterData {
-        bool isBatchPoster;
-        uint64 happyPathValidUntilTimestamp;
-        uint64 happyPathValidUntilBlockNumber;
-    }
-
-    struct DelayHistory {
-        uint64 blockNumber;
-        uint64 timestamp;
-        uint64 delayBlocks;
-        uint64 delaySeconds;
-    }
-
-    struct DelayData {
-        uint64 delayBufferBlocks;
-        uint64 delayBufferSeconds;
-        uint64 paroleExpiryTimestamp;
-        uint64 paroleExpiryBlockNumber;
-    }
-
-    struct ReplenishBacklog {
-        uint64 pooledSeconds;
-        uint64 pooledBlocks;
-    }
-
-    struct DelayAccPreimage {
-        bytes32 beforeDelayedAcc;
-        uint8 kind;
-        address sender;
-        uint64 blockNumber;
-        uint64 blockTimestamp;
-        uint256 count;
-        uint256 baseFeeL1;
-        bytes32 messageDataHash;
-    }
-
-    struct InboxAccPreimage {
-        bytes32 beforeAccBeforeAcc;
-        bytes32 beforeAccDataHash;
-        bytes32 beforeAccDelayedAcc;
-        DelayAccPreimage delayedAccPreimage;
-    }
-
-    IBridgeExtended public immutable bridge;
+    IBridge public immutable bridge;
 
     /// @inheritdoc ISequencerInboxBackwardDiff
     uint256 public constant HEADER_LENGTH = 40;
@@ -120,9 +77,9 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         _;
     }
 
-    ReplenishBacklog public replenishBacklog;
     DelayData public delayData;
     DelayHistory public delayHistory;
+    SequencerStatus public sequencerStatus;
 
     mapping(address => bool) public isSequencer;
 
@@ -133,7 +90,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
     bool internal immutable hostChainIsArbitrum = ArbitrumChecker.runningOnArbitrum();
 
     constructor(
-        IBridgeExtended bridge_,
+        IBridge bridge_,
         ISequencerInboxBackwardDiff.MaxTimeVariation memory maxTimeVariation_,
         uint256 _maxDataSize,
         uint256 _delayThresholdSeconds,
@@ -165,9 +122,11 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         delayData = DelayData({
             delayBufferBlocks: uint64(_maxDelayBufferBlocks),
             delayBufferSeconds: uint64(_maxDelayBufferSeconds),
-            paroleExpiryTimestamp: 0,
-            paroleExpiryBlockNumber: 0
+            happyPathValidUntilTimestamp: 0,
+            happyPathValidUntilBlockNumber: 0
         });
+        sequencerStatus.happyPathTimestampSeqIndex = uint64(bridge.sequencerMessageCount());
+        sequencerStatus.happyPathBlockNumberSeqIndex = uint64(bridge.sequencerMessageCount());
     }
 
     function _chainIdChanged() internal view returns (bool) {
@@ -343,7 +302,8 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         if (msg.sender != tx.origin) revert NotOrigin();
         if (!isBatchPoster(msg.sender)) revert NotBatchPoster();
         {
-            (bytes32 delayedAcc, uint256 _totalDelayedMessagesRead) = bridge.getFirstDelayedAcc();
+            uint256 _totalDelayedMessagesRead = bridge.totalDelayedMessagesRead();
+            bytes32 delayedAcc = bridge.delayedInboxAccs(_totalDelayedMessagesRead);
             require(
                 afterDelayedMessagesRead > _totalDelayedMessagesRead,
                 "Must sequence atleast one delayed message."
@@ -375,76 +335,100 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         }
 
         DelayHistory memory _delayHistory = delayHistory;
+        SequencerStatus memory _sequencerStatus = sequencerStatus;
 
-        _delayData.delayBufferSeconds = uint64(
-            calculateBuffer(
-                uint256(_delayHistory.timestamp),
-                uint256(pData.blockTimestamp),
-                uint256(_delayHistory.delaySeconds),
-                delayThresholdSeconds,
-                uint256(_delayData.delayBufferSeconds)
-            )
-        );
-
-        _delayData.delayBufferBlocks = uint64(
-            calculateBuffer(
-                uint256(_delayHistory.blockNumber),
-                uint256(pData.blockNumber),
-                uint256(_delayHistory.delayBlocks),
-                delayThresholdBlocks,
-                uint256(_delayData.delayBufferBlocks)
-            )
-        );
-
-        if (block.timestamp - uint256(pData.blockTimestamp) < delayThresholdSeconds) {
-            // delay msg is on time
-            if (uint256(_delayData.delayBufferSeconds) < maxDelayBufferSeconds) {
-                if (uint256(_delayHistory.delaySeconds) < delayThresholdSeconds) {
-                    // last delay msg was on time
-                    uint256 elapsedSeconds = uint256(pData.blockTimestamp)
-                        - uint256(_delayHistory.timestamp) + uint256(replenishBacklog.pooledSeconds);
-                    uint256 replenishSeconds =
-                        (elapsedSeconds / replenishSecondsPeriod) * replenishSecondsPerPeriod;
-                    replenishBacklog.pooledSeconds = uint64(elapsedSeconds % replenishSecondsPeriod);
-                    _delayData.delayBufferSeconds += uint64(replenishSeconds);
-                } else {
-                    replenishBacklog.pooledSeconds = uint64(0);
-                }
-            } else {
-                _delayData.paroleExpiryTimestamp =
-                    uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
-                if (uint256(_delayData.delayBufferSeconds) == maxDelayBufferSeconds) {
-                    batchPosterData[msg.sender].happyPathValidUntilTimestamp =
-                        uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
-                }
+        if (uint256(_delayHistory.delaySeconds) > delayThresholdSeconds) {
+            // unhappy path: prev batch is late
+            // decrease delay buffers from pending delayHistory
+            _delayData.delayBufferSeconds = uint64(
+                calculateBuffer(
+                    uint256(_delayHistory.timestamp),
+                    uint256(pData.blockTimestamp),
+                    uint256(_delayHistory.delaySeconds),
+                    delayThresholdSeconds,
+                    uint256(_delayData.delayBufferSeconds)
+                )
+            );
+            if (block.timestamp - uint256(pData.blockTimestamp) <= delayThresholdSeconds) {
+                // unhappy path -> happy path: prev batch is late and this batch is timely
+                // reset replenish pool
+                _sequencerStatus.replenishPooledSeconds = uint64(0);
+                _sequencerStatus.happyPathTimestampSeqIndex = uint64(seqMessageIndex);
             }
+        } else if (block.timestamp - uint256(pData.blockTimestamp) <= delayThresholdSeconds) {
+            // happy path: prev batch is timely AND this batch is timely
+            if (uint256(_delayData.delayBufferSeconds) < maxDelayBufferSeconds) {
+                (_delayData.delayBufferSeconds, _sequencerStatus.replenishPooledSeconds) =
+                calculateReplenish(
+                    uint256(_delayHistory.timestamp),
+                    uint256(pData.blockTimestamp),
+                    uint256(_sequencerStatus.replenishPooledSeconds),
+                    replenishSecondsPeriod,
+                    replenishSecondsPerPeriod,
+                    uint256(_delayData.delayBufferSeconds),
+                    maxDelayBufferSeconds
+                );
+            }
+            // store timewindow during which no proof is required
+            _delayData.happyPathValidUntilTimestamp =
+                uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
+            if (uint256(_delayData.delayBufferSeconds) == maxDelayBufferSeconds) {
+                // store timewindow locally for batchPoster, so that it can be used cheaply for future batches
+                batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilTimestamp =
+                    uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
+            }
+        } else {
+            // happy path -> unhappy path: prev batch is timely and this batch is late
+            // do nothing, delay buffer will be decreased in next batch
         }
 
-        if (block.number - uint256(pData.blockNumber) < delayThresholdBlocks) {
-            // delay msg is on time
-            if (uint256(_delayData.delayBufferBlocks) < maxDelayBufferBlocks) {
-                if (uint256(_delayHistory.delayBlocks) < delayThresholdBlocks) {
-                    // last delay msg was on time
-                    uint256 elapsedBlocks = uint256(pData.blockNumber)
-                        - uint256(_delayHistory.blockNumber) + uint256(replenishBacklog.pooledBlocks);
-                    uint256 replenishBlocks =
-                        (elapsedBlocks / replenishBlocksPeriod) * replenishBlocksPerPeriod;
-                    replenishBacklog.pooledSeconds = uint64(elapsedBlocks % replenishBlocksPeriod);
-                    _delayData.delayBufferSeconds += uint64(replenishBlocks);
-                } else {
-                    replenishBacklog.pooledBlocks = uint64(0);
-                }
-            } else {
-                _delayData.paroleExpiryBlockNumber =
-                    uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
-                if (uint256(_delayData.delayBufferBlocks) == maxDelayBufferBlocks) {
-                    batchPosterData[msg.sender].happyPathValidUntilBlockNumber =
-                        uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
-                }
+        if (uint256(_delayHistory.delayBlocks) > delayThresholdBlocks) {
+            // unhappy path: prev batch is late
+            // decrease delay buffers from pending delayHistory
+            _delayData.delayBufferBlocks = uint64(
+                calculateBuffer(
+                    uint256(_delayHistory.blockNumber),
+                    uint256(pData.blockNumber),
+                    uint256(_delayHistory.delayBlocks),
+                    delayThresholdBlocks,
+                    uint256(_delayData.delayBufferBlocks)
+                )
+            );
+            if (block.number - uint256(pData.blockNumber) <= delayThresholdBlocks) {
+                // unhappy path -> happy path: prev batch is late and this batch is timely
+                // reset replenish pool
+                _sequencerStatus.replenishPooledBlocks = uint64(0);
+                _sequencerStatus.happyPathBlockNumberSeqIndex = uint64(seqMessageIndex);
             }
+        } else if (block.number - uint256(pData.blockNumber) <= delayThresholdBlocks) {
+            // happy path: prev batch is timely AND this batch is timely
+            if (uint256(_delayData.delayBufferBlocks) < maxDelayBufferBlocks) {
+                (_delayData.delayBufferBlocks, _sequencerStatus.replenishPooledBlocks) =
+                calculateReplenish(
+                    uint256(_delayHistory.blockNumber),
+                    uint256(pData.blockNumber),
+                    uint256(_sequencerStatus.replenishPooledBlocks),
+                    replenishBlocksPeriod,
+                    replenishBlocksPerPeriod,
+                    uint256(_delayData.delayBufferBlocks),
+                    maxDelayBufferBlocks
+                );
+            }
+            // store blockwindow during which no proof is required
+            _delayData.happyPathValidUntilBlockNumber =
+                uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
+            if (uint256(_delayData.delayBufferBlocks) == maxDelayBufferBlocks) {
+                // store blockwindow locally for batchPoster, so that it can be used cheaply for future batches
+                batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilBlockNumber =
+                    uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
+            }
+        } else {
+            // happy path -> unhappy path: prev batch is timely and this batch is late
+            // do nothing, delay buffer will be decreased in next batch
         }
 
         delayData = _delayData;
+        sequencerStatus = _sequencerStatus;
 
         _delayHistory.blockNumber = pData.blockNumber;
         _delayHistory.timestamp = pData.blockTimestamp;
@@ -485,17 +469,17 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
                 isValidDelayedAccPreimage(pData.delayedAccPreimage, pData.beforeAccDelayedAcc),
                 "Invalid delayed acc preimage."
             );
-            // TODO optional can remove this global paroleExpiryTimestamp
-            delayData.paroleExpiryBlockNumber =
+
+            delayData.happyPathValidUntilBlockNumber =
                 uint64(pData.delayedAccPreimage.blockNumber + delayThresholdBlocks);
-            delayData.paroleExpiryTimestamp =
+            delayData.happyPathValidUntilTimestamp =
                 uint64(pData.delayedAccPreimage.blockTimestamp + delayThresholdSeconds);
             if (uint256(delayData.delayBufferBlocks) == maxDelayBufferBlocks) {
-                batchPosterData[msg.sender].happyPathValidUntilBlockNumber =
+                batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilBlockNumber =
                     uint64(uint256(pData.delayedAccPreimage.blockNumber) + delayThresholdBlocks);
             }
             if (uint256(delayData.delayBufferSeconds) == maxDelayBufferSeconds) {
-                batchPosterData[msg.sender].happyPathValidUntilTimestamp =
+                batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilTimestamp =
                     uint64(uint256(pData.delayedAccPreimage.blockTimestamp) + delayThresholdSeconds);
             }
         }
@@ -516,8 +500,10 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         bytes32 dataHash;
         IBridge.TimeBounds memory timeBounds;
         if (
-            uint256(batchPosterData[msg.sender].happyPathValidUntilBlockNumber) > block.number
-                && uint256(batchPosterData[msg.sender].happyPathValidUntilTimestamp) > block.timestamp
+            uint256(batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilBlockNumber)
+                > block.number
+                && uint256(batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilTimestamp)
+                    > block.timestamp
         ) {
             (dataHash, timeBounds) = formDataHash(
                 data, afterDelayedMessagesRead, maxDelayBufferBlocks, maxDelayBufferSeconds
@@ -525,10 +511,12 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         } else {
             DelayData memory _delayData = delayData;
             require(
-                block.timestamp < _delayData.paroleExpiryTimestamp, "Must be within safe timelimt."
+                block.timestamp < _delayData.happyPathValidUntilTimestamp,
+                "Must be within safe timelimt."
             );
             require(
-                block.number < _delayData.paroleExpiryBlockNumber, "Must be within safe timelimt."
+                block.number < _delayData.happyPathValidUntilBlockNumber,
+                "Must be within safe blocklimit."
             );
 
             (dataHash, timeBounds) = formDataHash(
@@ -583,14 +571,32 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         uint256 threshold,
         uint256 buffer
     ) internal pure returns (uint256) {
-        unchecked {
-            uint256 elapsed = end > start ? end - start : 0;
-            uint256 unexpectedDelay = delay > threshold ? delay - threshold : 0;
-            uint256 decrease = unexpectedDelay > elapsed ? elapsed : unexpectedDelay;
-            buffer = decrease > buffer ? 0 : buffer - decrease;
-            buffer = buffer > threshold ? buffer : threshold;
-            return buffer;
+        uint256 elapsed = end > start ? end - start : 0;
+        uint256 unexpectedDelay = delay > threshold ? delay - threshold : 0;
+        uint256 decrease = unexpectedDelay > elapsed ? elapsed : unexpectedDelay;
+        buffer = decrease > buffer ? 0 : buffer - decrease;
+        buffer = buffer > threshold ? buffer : threshold;
+        return buffer;
+    }
+
+    function calculateReplenish(
+        uint256 start,
+        uint256 end,
+        uint256 repelenishPool,
+        uint256 replenishPeriod,
+        uint256 replenishPerPeriod,
+        uint256 buffer,
+        uint256 maxBuffer
+    ) internal pure returns (uint64, uint64) {
+        uint256 elapsed = end > start ? end - start + repelenishPool : 0;
+        uint256 replenish = (elapsed / replenishPeriod) * replenishPerPeriod;
+        repelenishPool = elapsed % replenishPeriod;
+        buffer += replenish;
+        if (buffer > maxBuffer) {
+            buffer = maxBuffer;
+            repelenishPool = 0;
         }
+        return (uint64(buffer), uint64(repelenishPool));
     }
 
     modifier validateBatchData(bytes calldata data) {
