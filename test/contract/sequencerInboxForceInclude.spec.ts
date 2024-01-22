@@ -23,8 +23,6 @@ import { expect } from 'chai'
 import {
   Bridge,
   Bridge__factory,
-  BridgeExtended,
-  BridgeExtended__factory,
   Inbox,
   Inbox__factory,
   MessageTester,
@@ -245,9 +243,7 @@ describe('SequencerInboxForceInclude', async () => {
       'Inbox'
     )) as Inbox__factory
     const inboxTemplate = await inboxFac.deploy(117964)
-    const bridgeFac = (await ethers.getContractFactory(
-      deployOpt ? 'BridgeExtended' : 'Bridge'
-    ))
+    const bridgeFac = await ethers.getContractFactory('Bridge')
     const bridgeTemplate = await bridgeFac.deploy()
     const transparentUpgradeableProxyFac = (await ethers.getContractFactory(
       'TransparentUpgradeableProxy'
@@ -270,9 +266,9 @@ describe('SequencerInboxForceInclude', async () => {
       .connect(rollupOwner)
     await bridge.initialize(rollup.address)
 
-    const sequencerInboxFac = (await ethers.getContractFactory(
+    const sequencerInboxFac = await ethers.getContractFactory(
       deployOpt ? 'SequencerInboxBackwardDiff' : 'SequencerInbox'
-    ))
+    )
 
     const delayThresholdSeconds = 3600
     const delayThresholdBlocks = 300
@@ -283,34 +279,35 @@ describe('SequencerInboxForceInclude', async () => {
     const maxDelayBufferSeconds = 86400 * 2
     const maxDelayBufferBlocks = 7200 * 2
 
-    const sequencerInbox = deployOpt ? await (sequencerInboxFac as SequencerInboxBackwardDiff__factory).deploy(
-      bridgeProxy.address,
-      {
-        delayBlocks: maxDelayBlocks,
-        delaySeconds: maxDelayTime,
-        futureBlocks: 10,
-        futureSeconds: 3000,
-      },
-      117964,
-      delayThresholdSeconds,
-      delayThresholdBlocks,
-      replenishSecondsPerPeriod,
-      replenishBlocksPerPeriod,
-      replenishSecondsPeriod,
-      replenishBlocksPeriod,
-      maxDelayBufferSeconds,
-      maxDelayBufferBlocks
-    ) : 
-    await (sequencerInboxFac as SequencerInbox__factory).deploy(
-      bridgeProxy.address,
-      {
-        delayBlocks: maxDelayBlocks,
-        delaySeconds: maxDelayTime,
-        futureBlocks: 10,
-        futureSeconds: 3000,
-      },
-      117964
-    )
+    const sequencerInbox = deployOpt
+      ? await (sequencerInboxFac as SequencerInboxBackwardDiff__factory).deploy(
+          bridgeProxy.address,
+          {
+            delayBlocks: maxDelayBlocks,
+            delaySeconds: maxDelayTime,
+            futureBlocks: 10,
+            futureSeconds: 3000,
+          },
+          117964,
+          delayThresholdSeconds,
+          delayThresholdBlocks,
+          replenishSecondsPerPeriod,
+          replenishBlocksPerPeriod,
+          replenishSecondsPeriod,
+          replenishBlocksPeriod,
+          maxDelayBufferSeconds,
+          maxDelayBufferBlocks
+        )
+      : await (sequencerInboxFac as SequencerInbox__factory).deploy(
+          bridgeProxy.address,
+          {
+            delayBlocks: maxDelayBlocks,
+            delaySeconds: maxDelayTime,
+            futureBlocks: 10,
+            futureSeconds: 3000,
+          },
+          117964
+        )
 
     const inbox = await inboxFac.attach(inboxProxy.address).connect(user)
 
@@ -433,17 +430,23 @@ describe('SequencerInboxForceInclude', async () => {
     ).wait()
 
     const messagesReadOpt = await setupOpt.bridge.delayedMessageCount()
-    const totalDelayedMessagesRead = (await setupOpt.bridge.totalDelayedMessagesRead()).toNumber()
+    const totalDelayedMessagesRead = (
+      await setupOpt.bridge.totalDelayedMessagesRead()
+    ).toNumber()
 
     const beforeDelayedAcc =
-        totalDelayedMessagesRead == 0
-          ? ethers.constants.HashZero
-          : await setupOpt.bridge.delayedInboxAccs(totalDelayedMessagesRead - 1)
+      totalDelayedMessagesRead == 0
+        ? ethers.constants.HashZero
+        : await setupOpt.bridge.delayedInboxAccs(totalDelayedMessagesRead - 1)
 
-    const seqReportedMessageSubCountOpt = await setupOpt.bridge.sequencerReportedSubMessageCount()
+    const seqReportedMessageSubCountOpt =
+      await setupOpt.bridge.sequencerReportedSubMessageCount()
     const res2 = await (
       await (setupOpt.sequencerInbox as unknown as SequencerInboxBackwardDiff)
-        .connect(setupOpt.batchPoster)['addSequencerL2BatchFromOrigin(uint256,bytes,uint64,address,uint64,uint64,(bytes32,uint8,address,uint64,uint64,uint256,uint256,bytes32))'](
+        .connect(setupOpt.batchPoster)
+        [
+          'addSequencerL2BatchFromOrigin(uint256,bytes,uint64,address,uint64,uint64,(bytes32,uint8,address,uint64,uint64,uint256,uint256,bytes32))'
+        ](
           0,
           data,
           messagesReadOpt,
@@ -470,15 +473,17 @@ describe('SequencerInboxForceInclude', async () => {
           l.topics[0] ===
           bridge.interface.getEventTopic('SequencerBatchDelivered')
       )
-      .map(l => bridge.interface.parseLog(l).args)[0] as SequencerBatchDeliveredEvent["args"]
+      .map(
+        l => bridge.interface.parseLog(l).args
+      )[0] as SequencerBatchDeliveredEvent['args']
 
-      const batchReportLog = res2.logs
+    const batchReportLog = res2.logs
       .filter(
-        l =>
-          l.topics[0] ===
-          bridge.interface.getEventTopic('MessageDelivered')
+        l => l.topics[0] === bridge.interface.getEventTopic('MessageDelivered')
       )
-      .map(l => bridge.interface.parseLog(l).args)[0] as MessageDeliveredEvent["args"]
+      .map(
+        l => bridge.interface.parseLog(l).args
+      )[0] as MessageDeliveredEvent['args']
 
     const packed = ethers.utils.solidityPack(
       ['uint64', 'uint64', 'uint64', 'uint64', 'uint64'],
@@ -505,70 +510,78 @@ describe('SequencerInboxForceInclude', async () => {
       '0x1011'
     )
     const messagesReadOpt2 = await setupOpt.bridge.delayedMessageCount()
-    const totalDelayedMessagesRead2 = (await setupOpt.bridge.totalDelayedMessagesRead()).toNumber()
-    const delayedInboxAcc2 = totalDelayedMessagesRead2 > 0 ? 
-      await setupOpt.bridge.delayedInboxAccs(totalDelayedMessagesRead2 - 1) :
-      ethers.constants.HashZero
+    const totalDelayedMessagesRead2 = (
+      await setupOpt.bridge.totalDelayedMessagesRead()
+    ).toNumber()
+    const delayedInboxAcc2 =
+      totalDelayedMessagesRead2 > 0
+        ? await setupOpt.bridge.delayedInboxAccs(totalDelayedMessagesRead2 - 1)
+        : ethers.constants.HashZero
 
     const seqReportedMessageSubCountOpt2 =
       await setupOpt.bridge.sequencerReportedSubMessageCount()
-      const res3 = await (
-        await (setupOpt.sequencerInbox as unknown as SequencerInboxBackwardDiff)
-          .connect(setupOpt.batchPoster)
-          .functions['addSequencerL2BatchFromOrigin(uint256,bytes,uint64,address,uint64,uint64,(bytes32,uint8,address,uint64,uint64,uint256,uint256,bytes32))'](
-            1,
-            data,
-            messagesReadOpt2 - 1,
-            ethers.constants.AddressZero,
-            seqReportedMessageSubCountOpt2,
-            seqReportedMessageSubCountOpt2.add(10),
-            {
-              beforeDelayedAcc: batchReportLog.beforeInboxAcc,
-              kind: batchReportLog.kind,
-              sender: batchReportLog.sender,
-              blockNumber: res2.blockNumber,
-              blockTimestamp: batchReportLog.timestamp,
-              count: batchReportLog.messageIndex,
-              baseFeeL1: batchReportLog.baseFeeL1,
-              messageDataHash: batchReportLog.messageDataHash,
-            },
-            { gasLimit: 10000000 }
-          )
-      ).wait()
+    const res3 = await (
+      await (setupOpt.sequencerInbox as unknown as SequencerInboxBackwardDiff)
+        .connect(setupOpt.batchPoster)
+        .functions[
+          'addSequencerL2BatchFromOrigin(uint256,bytes,uint64,address,uint64,uint64,(bytes32,uint8,address,uint64,uint64,uint256,uint256,bytes32))'
+        ](
+          1,
+          data,
+          messagesReadOpt2 - 1,
+          ethers.constants.AddressZero,
+          seqReportedMessageSubCountOpt2,
+          seqReportedMessageSubCountOpt2.add(10),
+          {
+            beforeDelayedAcc: batchReportLog.beforeInboxAcc,
+            kind: batchReportLog.kind,
+            sender: batchReportLog.sender,
+            blockNumber: res2.blockNumber,
+            blockTimestamp: batchReportLog.timestamp,
+            count: batchReportLog.messageIndex,
+            baseFeeL1: batchReportLog.baseFeeL1,
+            messageDataHash: batchReportLog.messageDataHash,
+          },
+          { gasLimit: 10000000 }
+        )
+    ).wait()
 
-      const res4 = await (
-        await (setupOpt.sequencerInbox as unknown as SequencerInboxBackwardDiff)
-          .connect(setupOpt.batchPoster)
-            .functions['addSequencerL2BatchFromOrigin(uint256,bytes,uint256,address,uint256,uint256)'](
-              2,
-            data,
-            messagesReadOpt2,
-            ethers.constants.AddressZero,
-            seqReportedMessageSubCountOpt2.add(10),
-            seqReportedMessageSubCountOpt2.add(20),
-            { gasLimit: 10000000 }
-          )
-      ).wait()
+    const res4 = await (
+      await (setupOpt.sequencerInbox as unknown as SequencerInboxBackwardDiff)
+        .connect(setupOpt.batchPoster)
+        .functions[
+          'addSequencerL2BatchFromOrigin(uint256,bytes,uint256,address,uint256,uint256)'
+        ](
+          2,
+          data,
+          messagesReadOpt2,
+          ethers.constants.AddressZero,
+          seqReportedMessageSubCountOpt2.add(10),
+          seqReportedMessageSubCountOpt2.add(20),
+          { gasLimit: 10000000 }
+        )
+    ).wait()
 
+    const res5 = await (
+      await sequencerInbox
+        .connect(batchPoster)
+        .addSequencerL2BatchFromOrigin(
+          2,
+          data,
+          messagesReadOpt2,
+          ethers.constants.AddressZero,
+          seqReportedMessageSubCountOpt2.add(10),
+          seqReportedMessageSubCountOpt2.add(20),
+          { gasLimit: 10000000 }
+        )
+    ).wait()
 
-      const res5 = await (
-        await (sequencerInbox )
-          .connect(batchPoster)
-            .addSequencerL2BatchFromOrigin(
-              2,
-            data,
-            messagesReadOpt2,
-            ethers.constants.AddressZero,
-            seqReportedMessageSubCountOpt2.add(10),
-            seqReportedMessageSubCountOpt2.add(20),
-            { gasLimit: 10000000 }
-          )
-      ).wait()
-
-
-      console.log('start parole', res11.gasUsed.toNumber() - res3.gasUsed.toNumber())
-      console.log('on parole', res5.gasUsed.toNumber() - res4.gasUsed.toNumber())
-    })
+    console.log(
+      'start parole',
+      res11.gasUsed.toNumber() - res3.gasUsed.toNumber()
+    )
+    console.log('on parole', res5.gasUsed.toNumber() - res4.gasUsed.toNumber())
+  })
 
   it('can add batch', async () => {
     const { user, inbox, bridge, messageTester, sequencerInbox, batchPoster } =
