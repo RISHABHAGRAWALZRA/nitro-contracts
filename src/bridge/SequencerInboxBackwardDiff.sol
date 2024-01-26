@@ -55,10 +55,10 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
     IOwnable public rollup;
     mapping(address => BatchPosterData) public batchPosterData;
     // see ISequencerInbox.MaxTimeVariation
-    uint256 internal immutable delayBlocks;
-    uint256 internal immutable futureBlocks;
-    uint256 internal immutable delaySeconds;
-    uint256 internal immutable futureSeconds;
+    uint256 internal immutable maxTimeVariationDelayBlocks;
+    uint256 internal immutable maxTimeVariationFutureBlocks;
+    uint256 internal immutable maxTimeVariationDelaySeconds;
+    uint256 internal immutable maxTimeVariationFutureSeconds;
 
     uint256 internal immutable delayThresholdSeconds; // O(expected delay seconds)
     uint256 internal immutable delayThresholdBlocks; // O(expected delay blocks)
@@ -78,7 +78,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
     }
 
     DelayData public delayData;
-    DelayHistory public delayHistory;
+    DelayMsgData public delayMsgLastProven;
     SequencerStatus public sequencerStatus;
 
     mapping(address => bool) public isSequencer;
@@ -106,10 +106,10 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         bridge = bridge_;
         rollup = bridge_.rollup();
         if (address(rollup) == address(0)) revert RollupNotChanged();
-        delayBlocks = maxTimeVariation_.delayBlocks;
-        futureBlocks = maxTimeVariation_.futureBlocks;
-        delaySeconds = maxTimeVariation_.delaySeconds;
-        futureSeconds = maxTimeVariation_.futureSeconds;
+        maxTimeVariationDelayBlocks = maxTimeVariation_.delayBlocks;
+        maxTimeVariationFutureBlocks = maxTimeVariation_.futureBlocks;
+        maxTimeVariationDelaySeconds = maxTimeVariation_.delaySeconds;
+        maxTimeVariationFutureSeconds = maxTimeVariation_.futureSeconds;
         delayThresholdSeconds = _delayThresholdSeconds;
         delayThresholdBlocks = _delayThresholdBlocks;
         replenishSecondsPerPeriod = _replenishSecondsPerPeriod;
@@ -120,8 +120,8 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         maxDelayBufferBlocks = _maxDelayBufferBlocks;
         maxDataSize = _maxDataSize;
         delayData = DelayData({
-            delayBufferBlocks: uint64(_maxDelayBufferBlocks),
-            delayBufferSeconds: uint64(_maxDelayBufferSeconds),
+            bufferBlocks: uint64(_maxDelayBufferBlocks),
+            bufferSeconds: uint64(_maxDelayBufferSeconds),
             happyPathValidUntilTimestamp: 0,
             happyPathValidUntilBlockNumber: 0
         });
@@ -183,10 +183,14 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         } else {
             return (
                 ISequencerInboxBackwardDiff.MaxTimeVariation({
-                    delayBlocks: delayBlocks < delayBufferBlocks ? delayBlocks : delayBufferBlocks,
-                    futureBlocks: futureBlocks,
-                    delaySeconds: delaySeconds < delayBufferSeconds ? delaySeconds : delayBufferSeconds,
-                    futureSeconds: futureSeconds
+                    delayBlocks: maxTimeVariationDelayBlocks < delayBufferBlocks
+                        ? maxTimeVariationDelayBlocks
+                        : delayBufferBlocks,
+                    futureBlocks: maxTimeVariationFutureBlocks,
+                    delaySeconds: maxTimeVariationDelaySeconds < delayBufferSeconds
+                        ? maxTimeVariationDelaySeconds
+                        : delayBufferSeconds,
+                    futureSeconds: maxTimeVariationFutureSeconds
                 })
             );
         }
@@ -197,7 +201,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         view
         returns (ISequencerInboxBackwardDiff.MaxTimeVariation memory)
     {
-        return maxTimeVariation(delayData.delayBufferBlocks, delayData.delayBufferSeconds);
+        return maxTimeVariation(delayData.bufferBlocks, delayData.bufferSeconds);
     }
 
     /// @inheritdoc ISequencerInboxBackwardDiff
@@ -212,33 +216,37 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         if (_totalDelayedMessagesRead <= totalDelayedMessagesRead()) revert DelayedBackwards();
         DelayData memory _delayData = delayData;
         {
-            DelayHistory memory _delayHistory = delayHistory;
+            DelayMsgData memory _delayMsgLastProven = delayMsgLastProven;
 
-            _delayData.delayBufferSeconds = uint64(
+            // First apply updates to delay buffers from pending delayHistory
+            _delayData.bufferSeconds = uint64(
                 calculateBuffer(
-                    _delayHistory.timestamp,
+                    _delayMsgLastProven.timestamp,
                     uint64(l1BlockAndTime[0]),
-                    _delayHistory.delaySeconds,
+                    _delayMsgLastProven.delaySeconds,
                     uint64(delayThresholdSeconds),
-                    _delayData.delayBufferSeconds
+                    _delayData.bufferSeconds
                 )
             );
 
-            _delayData.delayBufferBlocks = uint64(
+            _delayData.bufferBlocks = uint64(
                 calculateBuffer(
-                    _delayHistory.blockNumber,
+                    _delayMsgLastProven.blockNumber,
                     uint64(l1BlockAndTime[1]),
-                    _delayHistory.delayBlocks,
+                    _delayMsgLastProven.delayBlocks,
                     uint64(delayThresholdBlocks),
-                    _delayData.delayBufferBlocks
+                    _delayData.bufferBlocks
                 )
             );
+
+            // store delay history to be applied to delay buffers in next batch
+            _delayMsgLastProven.timestamp = uint64(l1BlockAndTime[0]);
+            _delayMsgLastProven.blockNumber = uint64(l1BlockAndTime[1]);
+            _delayMsgLastProven.delaySeconds = uint64(block.timestamp) - l1BlockAndTime[0];
+            _delayMsgLastProven.delayBlocks = uint64(block.number) - l1BlockAndTime[1];
+
+            delayMsgLastProven = _delayMsgLastProven;
             delayData = _delayData;
-            _delayHistory.timestamp = uint64(l1BlockAndTime[0]);
-            _delayHistory.blockNumber = uint64(l1BlockAndTime[1]);
-            _delayHistory.delaySeconds = uint64(block.timestamp) - l1BlockAndTime[0];
-            _delayHistory.delayBlocks = uint64(block.number) - l1BlockAndTime[1];
-            delayHistory = _delayHistory;
         }
         bytes32 messageHash = Messages.messageHash(
             kind,
@@ -261,7 +269,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         ) revert IncorrectMessagePreimage();
 
         ISequencerInboxBackwardDiff.MaxTimeVariation memory maxTimeVariation_ =
-            maxTimeVariation(_delayData.delayBufferBlocks, _delayData.delayBufferSeconds);
+            maxTimeVariation(_delayData.bufferBlocks, _delayData.bufferSeconds);
         // Can only force-include after the Sequencer-only window has expired.
         if (l1BlockAndTime[0] + maxTimeVariation_.delayBlocks >= block.number) {
             revert ForceIncludeBlockTooSoon();
@@ -271,7 +279,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         }
 
         (bytes32 dataHash, IBridge.TimeBounds memory timeBounds) = formEmptyDataHash(
-            _totalDelayedMessagesRead, _delayData.delayBufferBlocks, _delayData.delayBufferSeconds
+            _totalDelayedMessagesRead, _delayData.bufferBlocks, _delayData.bufferSeconds
         );
 
         uint256 prevSeqMsgCount = bridge.sequencerReportedSubMessageCount();
@@ -296,7 +304,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         IGasRefunder gasRefunder,
         uint64 prevMessageCount,
         uint64 newMessageCount,
-        DelayAccPreimage calldata pData
+        DelayAccPreimage calldata delayMsgRecent
     ) external refundsGas(gasRefunder) {
         // solhint-disable-next-line avoid-tx-origin
         if (msg.sender != tx.origin) revert NotOrigin();
@@ -309,16 +317,14 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
                 "Must sequence atleast one delayed message."
             );
             require(
-                isValidDelayedAccPreimage(pData, delayedAcc), "Invalid next delayed acc preimage."
+                isValidDelayedAccPreimage(delayMsgRecent, delayedAcc),
+                "Invalid next delayed acc preimage."
             );
         }
         DelayData memory _delayData = delayData;
 
         (bytes32 dataHash, IBridge.TimeBounds memory timeBounds) = formDataHash(
-            data,
-            afterDelayedMessagesRead,
-            _delayData.delayBufferBlocks,
-            _delayData.delayBufferSeconds
+            data, afterDelayedMessagesRead, _delayData.bufferBlocks, _delayData.bufferSeconds
         );
 
         (uint256 seqMessageIndex,) = addSequencerL2BatchImpl(
@@ -334,93 +340,94 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
             revert BadSequencerNumber(seqMessageIndex, sequenceNumber);
         }
 
-        DelayHistory memory _delayHistory = delayHistory;
+        DelayMsgData memory _delayMsgLastProven = delayMsgLastProven;
         SequencerStatus memory _sequencerStatus = sequencerStatus;
 
-        if (uint256(_delayHistory.delaySeconds) > delayThresholdSeconds) {
+        if (uint256(_delayMsgLastProven.delaySeconds) > delayThresholdSeconds) {
             // unhappy path: prev batch is late
             // decrease delay buffers from pending delayHistory
-            _delayData.delayBufferSeconds = uint64(
+            _delayData.bufferSeconds = uint64(
                 calculateBuffer(
-                    uint256(_delayHistory.timestamp),
-                    uint256(pData.blockTimestamp),
-                    uint256(_delayHistory.delaySeconds),
+                    uint256(_delayMsgLastProven.timestamp),
+                    uint256(delayMsgRecent.blockTimestamp),
+                    uint256(_delayMsgLastProven.delaySeconds),
                     delayThresholdSeconds,
-                    uint256(_delayData.delayBufferSeconds)
+                    uint256(_delayData.bufferSeconds)
                 )
             );
-            if (block.timestamp - uint256(pData.blockTimestamp) <= delayThresholdSeconds) {
+            if (block.timestamp - uint256(delayMsgRecent.blockTimestamp) <= delayThresholdSeconds) {
                 // unhappy path -> happy path: prev batch is late and this batch is timely
                 // reset replenish pool
-                _sequencerStatus.replenishPooledSeconds = uint64(0);
+                _sequencerStatus.replenishPoolSeconds = uint64(0);
                 _sequencerStatus.happyPathTimestampSeqIndex = uint64(seqMessageIndex);
             }
-        } else if (block.timestamp - uint256(pData.blockTimestamp) <= delayThresholdSeconds) {
+        } else if (
+            block.timestamp - uint256(delayMsgRecent.blockTimestamp) <= delayThresholdSeconds
+        ) {
             // happy path: prev batch is timely AND this batch is timely
-            if (uint256(_delayData.delayBufferSeconds) < maxDelayBufferSeconds) {
-                (_delayData.delayBufferSeconds, _sequencerStatus.replenishPooledSeconds) =
+            if (uint256(_delayData.bufferSeconds) < maxDelayBufferSeconds) {
+                (_delayData.bufferSeconds, _sequencerStatus.replenishPoolSeconds) =
                 calculateReplenish(
-                    uint256(_delayHistory.timestamp),
-                    uint256(pData.blockTimestamp),
-                    uint256(_sequencerStatus.replenishPooledSeconds),
+                    uint256(_delayMsgLastProven.timestamp),
+                    uint256(delayMsgRecent.blockTimestamp),
+                    uint256(_sequencerStatus.replenishPoolSeconds),
                     replenishSecondsPeriod,
                     replenishSecondsPerPeriod,
-                    uint256(_delayData.delayBufferSeconds),
+                    uint256(_delayData.bufferSeconds),
                     maxDelayBufferSeconds
                 );
             }
             // store timewindow during which no proof is required
             _delayData.happyPathValidUntilTimestamp =
-                uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
-            if (uint256(_delayData.delayBufferSeconds) == maxDelayBufferSeconds) {
+                uint64(uint256(delayMsgRecent.blockTimestamp) + delayThresholdSeconds);
+            if (uint256(_delayData.bufferSeconds) == maxDelayBufferSeconds) {
                 // store timewindow locally for batchPoster, so that it can be used cheaply for future batches
                 batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilTimestamp =
-                    uint64(uint256(pData.blockTimestamp) + delayThresholdSeconds);
+                    uint64(uint256(delayMsgRecent.blockTimestamp) + delayThresholdSeconds);
             }
         } else {
             // happy path -> unhappy path: prev batch is timely and this batch is late
             // do nothing, delay buffer will be decreased in next batch
         }
 
-        if (uint256(_delayHistory.delayBlocks) > delayThresholdBlocks) {
+        if (uint256(_delayMsgLastProven.delayBlocks) > delayThresholdBlocks) {
             // unhappy path: prev batch is late
             // decrease delay buffers from pending delayHistory
-            _delayData.delayBufferBlocks = uint64(
+            _delayData.bufferBlocks = uint64(
                 calculateBuffer(
-                    uint256(_delayHistory.blockNumber),
-                    uint256(pData.blockNumber),
-                    uint256(_delayHistory.delayBlocks),
+                    uint256(_delayMsgLastProven.blockNumber),
+                    uint256(delayMsgRecent.blockNumber),
+                    uint256(_delayMsgLastProven.delayBlocks),
                     delayThresholdBlocks,
-                    uint256(_delayData.delayBufferBlocks)
+                    uint256(_delayData.bufferBlocks)
                 )
             );
-            if (block.number - uint256(pData.blockNumber) <= delayThresholdBlocks) {
+            if (block.number - uint256(delayMsgRecent.blockNumber) <= delayThresholdBlocks) {
                 // unhappy path -> happy path: prev batch is late and this batch is timely
                 // reset replenish pool
-                _sequencerStatus.replenishPooledBlocks = uint64(0);
+                _sequencerStatus.replenishPoolBlocks = uint64(0);
                 _sequencerStatus.happyPathBlockNumberSeqIndex = uint64(seqMessageIndex);
             }
-        } else if (block.number - uint256(pData.blockNumber) <= delayThresholdBlocks) {
+        } else if (block.number - uint256(delayMsgRecent.blockNumber) <= delayThresholdBlocks) {
             // happy path: prev batch is timely AND this batch is timely
-            if (uint256(_delayData.delayBufferBlocks) < maxDelayBufferBlocks) {
-                (_delayData.delayBufferBlocks, _sequencerStatus.replenishPooledBlocks) =
-                calculateReplenish(
-                    uint256(_delayHistory.blockNumber),
-                    uint256(pData.blockNumber),
-                    uint256(_sequencerStatus.replenishPooledBlocks),
+            if (uint256(_delayData.bufferBlocks) < maxDelayBufferBlocks) {
+                (_delayData.bufferBlocks, _sequencerStatus.replenishPoolBlocks) = calculateReplenish(
+                    uint256(_delayMsgLastProven.blockNumber),
+                    uint256(delayMsgRecent.blockNumber),
+                    uint256(_sequencerStatus.replenishPoolBlocks),
                     replenishBlocksPeriod,
                     replenishBlocksPerPeriod,
-                    uint256(_delayData.delayBufferBlocks),
+                    uint256(_delayData.bufferBlocks),
                     maxDelayBufferBlocks
                 );
             }
-            // store blockwindow during which no proof is required
+            // store proof validity window
             _delayData.happyPathValidUntilBlockNumber =
-                uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
-            if (uint256(_delayData.delayBufferBlocks) == maxDelayBufferBlocks) {
+                uint64(uint256(delayMsgRecent.blockNumber) + delayThresholdBlocks);
+            if (uint256(_delayData.bufferBlocks) == maxDelayBufferBlocks) {
                 // store blockwindow locally for batchPoster, so that it can be used cheaply for future batches
                 batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilBlockNumber =
-                    uint64(uint256(pData.blockNumber) + delayThresholdBlocks);
+                    uint64(uint256(delayMsgRecent.blockNumber) + delayThresholdBlocks);
             }
         } else {
             // happy path -> unhappy path: prev batch is timely and this batch is late
@@ -430,11 +437,12 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         delayData = _delayData;
         sequencerStatus = _sequencerStatus;
 
-        _delayHistory.blockNumber = pData.blockNumber;
-        _delayHistory.timestamp = pData.blockTimestamp;
-        _delayHistory.delaySeconds = uint64(block.timestamp - uint256(pData.blockTimestamp));
-        _delayHistory.delayBlocks = uint64(block.number - uint256(pData.blockNumber));
-        delayHistory = _delayHistory;
+        _delayMsgLastProven.blockNumber = delayMsgRecent.blockNumber;
+        _delayMsgLastProven.timestamp = delayMsgRecent.blockTimestamp;
+        _delayMsgLastProven.delaySeconds =
+            uint64(block.timestamp - uint256(delayMsgRecent.blockTimestamp));
+        _delayMsgLastProven.delayBlocks = uint64(block.number - uint256(delayMsgRecent.blockNumber));
+        delayMsgLastProven = _delayMsgLastProven;
     }
 
     // renew parole
@@ -474,11 +482,11 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
                 uint64(pData.delayedAccPreimage.blockNumber + delayThresholdBlocks);
             delayData.happyPathValidUntilTimestamp =
                 uint64(pData.delayedAccPreimage.blockTimestamp + delayThresholdSeconds);
-            if (uint256(delayData.delayBufferBlocks) == maxDelayBufferBlocks) {
+            if (uint256(delayData.bufferBlocks) == maxDelayBufferBlocks) {
                 batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilBlockNumber =
                     uint64(uint256(pData.delayedAccPreimage.blockNumber) + delayThresholdBlocks);
             }
-            if (uint256(delayData.delayBufferSeconds) == maxDelayBufferSeconds) {
+            if (uint256(delayData.bufferSeconds) == maxDelayBufferSeconds) {
                 batchPosterData[msg.sender].maxBufferAndHappyPathValidUntilTimestamp =
                     uint64(uint256(pData.delayedAccPreimage.blockTimestamp) + delayThresholdSeconds);
             }
@@ -522,8 +530,8 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
             (dataHash, timeBounds) = formDataHash(
                 data,
                 afterDelayedMessagesRead,
-                uint256(_delayData.delayBufferBlocks),
-                uint256(_delayData.delayBufferSeconds)
+                uint256(_delayData.bufferBlocks),
+                uint256(_delayData.bufferSeconds)
             );
         }
 

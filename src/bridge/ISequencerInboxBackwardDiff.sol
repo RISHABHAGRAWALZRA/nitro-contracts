@@ -17,7 +17,7 @@ interface ISequencerInboxBackwardDiff is IDelayedMessageProvider {
         uint64 maxBufferAndHappyPathValidUntilBlockNumber;
     }
 
-    struct DelayHistory {
+    struct DelayMsgData {
         uint64 blockNumber;
         uint64 timestamp;
         uint64 delayBlocks;
@@ -25,15 +25,15 @@ interface ISequencerInboxBackwardDiff is IDelayedMessageProvider {
     }
 
     struct DelayData {
-        uint64 delayBufferBlocks;
-        uint64 delayBufferSeconds;
+        uint64 bufferBlocks;
+        uint64 bufferSeconds;
         uint64 happyPathValidUntilTimestamp;
         uint64 happyPathValidUntilBlockNumber;
     }
 
     struct SequencerStatus {
-        uint64 replenishPooledSeconds;
-        uint64 replenishPooledBlocks;
+        uint64 replenishPoolSeconds;
+        uint64 replenishPoolBlocks;
         uint64 happyPathTimestampSeqIndex;
         uint64 happyPathBlockNumberSeqIndex;
     }
