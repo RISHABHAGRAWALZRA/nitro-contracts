@@ -219,31 +219,32 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
             DelayMsgData memory _delayMsgLastProven = delayMsgLastProven;
 
             // First apply updates to delay buffers from pending delayHistory
-            _delayData.bufferSeconds = uint64(
-                calculateBuffer(
-                    _delayMsgLastProven.timestamp,
-                    uint64(l1BlockAndTime[0]),
-                    _delayMsgLastProven.delaySeconds,
-                    uint64(delayThresholdSeconds),
-                    _delayData.bufferSeconds
-                )
-            );
 
             _delayData.bufferBlocks = uint64(
                 calculateBuffer(
                     _delayMsgLastProven.blockNumber,
-                    uint64(l1BlockAndTime[1]),
+                    uint64(l1BlockAndTime[0]),
                     _delayMsgLastProven.delayBlocks,
                     uint64(delayThresholdBlocks),
                     _delayData.bufferBlocks
                 )
             );
 
+            _delayData.bufferSeconds = uint64(
+                calculateBuffer(
+                    _delayMsgLastProven.timestamp,
+                    uint64(l1BlockAndTime[1]),
+                    _delayMsgLastProven.delaySeconds,
+                    uint64(delayThresholdSeconds),
+                    _delayData.bufferSeconds
+                )
+            );
+
             // store delay history to be applied to delay buffers in next batch
-            _delayMsgLastProven.timestamp = uint64(l1BlockAndTime[0]);
-            _delayMsgLastProven.blockNumber = uint64(l1BlockAndTime[1]);
-            _delayMsgLastProven.delaySeconds = uint64(block.timestamp) - l1BlockAndTime[0];
-            _delayMsgLastProven.delayBlocks = uint64(block.number) - l1BlockAndTime[1];
+            _delayMsgLastProven.blockNumber = uint64(l1BlockAndTime[0]);
+            _delayMsgLastProven.timestamp = uint64(l1BlockAndTime[1]);
+            _delayMsgLastProven.delayBlocks = uint64(block.number) - l1BlockAndTime[0];
+            _delayMsgLastProven.delaySeconds = uint64(block.timestamp) - l1BlockAndTime[1];
 
             delayMsgLastProven = _delayMsgLastProven;
             delayData = _delayData;
@@ -477,7 +478,7 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
                 isValidDelayedAccPreimage(pData.delayedAccPreimage, pData.beforeAccDelayedAcc),
                 "Invalid delayed acc preimage."
             );
-
+            
             delayData.happyPathValidUntilBlockNumber =
                 uint64(pData.delayedAccPreimage.blockNumber + delayThresholdBlocks);
             delayData.happyPathValidUntilTimestamp =
@@ -776,5 +777,10 @@ contract SequencerInboxBackwardDiff is GasRefundEnabled, ISequencerInboxBackward
         DasKeySetInfo memory ksInfo = dasKeySetInfo[ksHash];
         if (ksInfo.creationBlock == 0) revert NoSuchKeyset(ksHash);
         return uint256(ksInfo.creationBlock);
+    }
+
+    function isSequencerOnTime() external view returns (bool) {
+        return delayData.happyPathValidUntilTimestamp > block.timestamp
+            && delayData.happyPathValidUntilBlockNumber > block.number;
     }
 }
