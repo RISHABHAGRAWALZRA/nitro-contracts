@@ -8,6 +8,7 @@ import 'hardhat-gas-reporter'
 import 'hardhat-ignore-warnings'
 // import '@tovarishfin/hardhat-yul';
 import dotenv from 'dotenv'
+import { url } from 'inspector'
 
 dotenv.config()
 
@@ -138,6 +139,12 @@ module.exports = {
     geth: {
       url: 'http://localhost:8545',
     },
+    baseSpolia: {
+      url: 'https://sepolia.base.org',
+      accounts: process.env['DEVNET_PRIVKEY']
+        ? [process.env['DEVNET_PRIVKEY']]
+        : [],
+    }
   },
   etherscan: {
     apiKey: {
