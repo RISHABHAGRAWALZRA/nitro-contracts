@@ -1,10 +1,9 @@
 pragma solidity ^0.8.0;
 
-import "./MerkleProofInput.sol";
+import "./BlobProof.sol";
 struct BlobPointer {
-    bytes32 blockHash;
-    string sender;
-    uint32 nonce;
+    uint32 blockHeight;
+    uint32 extrinsicIndex;
     bytes32 dasTreeRootHash;
-    MerkleProofInput merkleProofInput;
+    BlobProof blobProof;
 }

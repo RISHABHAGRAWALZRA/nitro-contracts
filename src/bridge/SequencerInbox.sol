@@ -42,8 +42,9 @@ import "../precompiles/ArbSys.sol";
 import "../libraries/IReader4844.sol";
 
 import "../data-availability/IAvailDABridge.sol";
-import "../data-availability/MerkleProofInput.sol";
+import "../data-availability/BlobProof.sol";
 import "../data-availability/BlobPointer.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {L1MessageType_batchPostingReport} from "../libraries/MessageTypes.sol";
 import "../libraries/DelegateCallAware.sol";
 import {IGasRefunder} from "../libraries/IGasRefunder.sol";
@@ -588,34 +589,19 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
                 // console.logString("Avail header found");
                 BlobPointer memory blobPointer;
                 (
-                    blobPointer.blockHash,
-                    blobPointer.sender,
-                    blobPointer.nonce,
+                    blobPointer.blockHeight,
+                    blobPointer.extrinsicIndex,
                     blobPointer.dasTreeRootHash,
-                    blobPointer.merkleProofInput
-                ) = abi.decode(data[1:], (bytes32, string, uint32, bytes32, MerkleProofInput));
+                    blobPointer.blobProof
+                ) = abi.decode(data[1:], (uint32, uint32, bytes32, BlobProof));
 
-                // console.logBytes32(blobPointer.blockHash);
-                // console.logString(blobPointer.sender);
-                // console.logUint(blobPointer.nonce);
-                // console.logBytes32(blobPointer.dasTreeRootHash);
-
-                // for (uint256 i = 0; i < blobPointer.merkleProofInput.dataRootProof.length; i++) {
-                //     console.logBytes32(blobPointer.merkleProofInput.dataRootProof[i]);
-                // }
-
-                // for (uint256 i = 0; i < blobPointer.merkleProofInput.leafProof.length; i++) {
-                //     console.logBytes32(blobPointer.merkleProofInput.leafProof[i]);
-                // }
-
-                // console.logBytes32(blobPointer.merkleProofInput.rangeHash);
-                // console.logUint(blobPointer.merkleProofInput.dataRootIndex);
-                // console.logBytes32(blobPointer.merkleProofInput.blobRoot);
-                // console.logBytes32(blobPointer.merkleProofInput.bridgeRoot);
-                // console.logBytes32(blobPointer.merkleProofInput.leaf);
-                // console.logUint(blobPointer.merkleProofInput.leafIndex);
-                if (!availBridge.verifyBlobLeaf(blobPointer.merkleProofInput))
-                    revert BatchDataValidationForAvailDAFailed(blobPointer.merkleProofInput.leaf);
+                if (
+                    !MerkleProof.verify(
+                        blobPointer.blobProof.leafProof,
+                        blobPointer.blobProof.dataRoot,
+                        blobPointer.blobProof.leaf
+                    )
+                ) revert BatchDataValidationForAvailDAFailed(blobPointer.blobProof.leaf);
 
                 // Not included this event as this function declared as view
                 //emit validateBatchDataOverAvailDA(blobPointer.merkleProofInput);
