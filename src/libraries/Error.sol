@@ -188,6 +188,9 @@ error MissingDataHashes();
 /// @dev Batch Data validation over avail bridge failed with the given merkle proof input
 error BatchDataValidationForAvailDAFailed(bytes32);
 
+/// @dev Thrown when Avail Bridge is not updated with updateAvailBridgeAddress
+error AvailBridgeNotChanged();
+
 /// @dev Thrown when rollup is not updated with updateRollupAddress
 error RollupNotChanged();
 

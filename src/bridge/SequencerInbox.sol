@@ -30,7 +30,8 @@ import {
     InvalidHeaderFlag,
     NativeTokenMismatch,
     BadMaxTimeVariation,
-    Deprecated
+    Deprecated,
+    AvailBridgeNotChanged
 } from "../libraries/Error.sol";
 import "./IBridge.sol";
 import "./IInboxBase.sol";
@@ -217,6 +218,15 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
         IOwnable newRollup = bridge.rollup();
         if (rollup == newRollup) revert RollupNotChanged();
         rollup = newRollup;
+    }
+
+    /// @notice Allows the rollup owner to change the Avail Bridge address
+    function updateAvailBridgeAddress(IAvailDABridge availBridge_) external {
+        if (msg.sender != IOwnable(rollup).owner())
+            revert NotOwner(msg.sender, IOwnable(rollup).owner());
+        if (availBridge_ == IAvailDABridge(address(0))) revert HadZeroInit();
+        if (availBridge == availBridge_) revert AvailBridgeNotChanged();
+        availBridge = availBridge_;
     }
 
     function getTimeBounds() internal view virtual returns (IBridge.TimeBounds memory) {
