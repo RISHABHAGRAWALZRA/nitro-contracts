@@ -138,6 +138,12 @@ module.exports = {
     geth: {
       url: 'http://localhost:8545',
     },
+    baseSepolia: {
+      url: 'https://sepolia.base.org',
+      accounts: process.env['DEVNET_PRIVKEY']
+        ? [process.env['DEVNET_PRIVKEY']]
+        : [],
+    }
   },
   etherscan: {
     apiKey: {
@@ -150,6 +156,7 @@ module.exports = {
       nova: process.env['NOVA_ARBISCAN_API_KEY'],
       arbGoerliRollup: process.env['ARBISCAN_API_KEY'],
       arbSepolia: process.env['ARBISCAN_API_KEY'],
+      baseSepolia: process.env['ETHERSCAN_API_KEY']
     },
     customChains: [
       {
@@ -176,6 +183,14 @@ module.exports = {
           browserURL: 'https://sepolia-explorer.arbitrum.io/',
         },
       },
+      {
+        network: 'baseSepolia',
+        chainId: 84532,
+        urls: {
+          apiURL: 'https://api-sepolia.basescan.org/api',
+          browserURL: '	https://sepolia-explorer.base.org',
+        }
+      }
     ],
   },
   mocha: {
