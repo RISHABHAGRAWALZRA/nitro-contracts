@@ -19,7 +19,6 @@ import {
     BadSequencerNumber,
     AlreadyValidDASKeyset,
     NoSuchKeyset,
-    BatchDataValidationForAvailDAFailed,
     NotForked,
     NotBatchPosterManager,
     RollupNotChanged,
@@ -31,7 +30,7 @@ import {
     NativeTokenMismatch,
     BadMaxTimeVariation,
     Deprecated,
-    AvailBridgeNotChanged
+    BadDABatchAttestation
 } from "../libraries/Error.sol";
 import "./IBridge.sol";
 import "./IInboxBase.sol";
@@ -41,18 +40,13 @@ import "./Messages.sol";
 import "../precompiles/ArbGasInfo.sol";
 import "../precompiles/ArbSys.sol";
 import "../libraries/IReader4844.sol";
-
-import "../data-availability/IAvailDABridge.sol";
-import "../data-availability/BlobProof.sol";
-import "../data-availability/BlobPointer.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {L1MessageType_batchPostingReport} from "../libraries/MessageTypes.sol";
 import "../libraries/DelegateCallAware.sol";
 import {IGasRefunder} from "../libraries/IGasRefunder.sol";
 import {GasRefundEnabled} from "../libraries/GasRefundEnabled.sol";
 import "../libraries/ArbitrumChecker.sol";
 import {IERC20Bridge} from "./IERC20Bridge.sol";
-//import "hardhat/console.sol";
+import "../data-availability/IDABridge.sol";
 
 /**
  * @title  Accepts batches from the sequencer and adds them to the rollup inbox.
@@ -66,6 +60,8 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
 
     IBridge public bridge;
 
+    IDABridge public daBridge;
+
     /// @inheritdoc ISequencerInbox
     uint256 public constant HEADER_LENGTH = 40;
 
@@ -77,9 +73,6 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
 
     /// @inheritdoc ISequencerInbox
     bytes1 public constant DAS_MESSAGE_HEADER_FLAG = 0x80;
-
-    /// @inheritdoc ISequencerInbox
-    bytes1 public constant AVAIL_MESSAGE_HEADER_FLAG = 0x0a;
 
     /// @inheritdoc ISequencerInbox
     bytes1 public constant TREE_DAS_MESSAGE_HEADER_FLAG = 0x08;
@@ -135,8 +128,6 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
     // True if the chain this SequencerInbox is deployed on uses custom fee token
     bool public immutable isUsingFeeToken;
 
-    IAvailDABridge public availBridge;
-
     constructor(uint256 _maxDataSize, IReader4844 reader4844_, bool _isUsingFeeToken) {
         maxDataSize = _maxDataSize;
         if (hostChainIsArbitrum) {
@@ -187,7 +178,7 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
     function initialize(
         IBridge bridge_,
         ISequencerInbox.MaxTimeVariation calldata maxTimeVariation_,
-        IAvailDABridge availBridge_
+        IDABridge daBridge_
     ) external onlyDelegated {
         if (bridge != IBridge(address(0))) revert AlreadyInit();
         if (bridge_ == IBridge(address(0))) revert HadZeroInit();
@@ -208,7 +199,13 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
         rollup = bridge_.rollup();
 
         _setMaxTimeVariation(maxTimeVariation_);
-        availBridge = availBridge_;
+
+        //initialise DA bridge for DA attestation verification
+        if (daBridge != IDABridge(address(0))) revert AlreadyInit();
+
+        // Can be zero if there is no da bridge requirement
+        // if (daBridge_ == IDABridge(address(0))) revert HadZeroInit();
+        daBridge = daBridge_;
     }
 
     /// @notice Allows the rollup owner to sync the rollup address
@@ -218,15 +215,6 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
         IOwnable newRollup = bridge.rollup();
         if (rollup == newRollup) revert RollupNotChanged();
         rollup = newRollup;
-    }
-
-    /// @notice Allows the rollup owner to change the Avail Bridge address
-    function updateAvailBridgeAddress(IAvailDABridge availBridge_) external {
-        if (msg.sender != IOwnable(rollup).owner())
-            revert NotOwner(msg.sender, IOwnable(rollup).owner());
-        if (availBridge_ == IAvailDABridge(address(0))) revert HadZeroInit();
-        if (availBridge == availBridge_) revert AvailBridgeNotChanged();
-        availBridge = availBridge_;
     }
 
     function getTimeBounds() internal view virtual returns (IBridge.TimeBounds memory) {
@@ -553,13 +541,13 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
     ///         therefore we restrict which flags can be provided as a header in this field
     ///         This also safe guards unused flags for future use, as we know they would have been disallowed up until this point
     /// @param  headerByte The first byte in the calldata
-    function isValidCallDataFlag(bytes1 headerByte) internal pure returns (bool) {
+    function isValidCallDataFlag(bytes1 headerByte) internal view returns (bool) {
         return
             headerByte == BROTLI_MESSAGE_HEADER_FLAG ||
             headerByte == DAS_MESSAGE_HEADER_FLAG ||
             (headerByte == (DAS_MESSAGE_HEADER_FLAG | TREE_DAS_MESSAGE_HEADER_FLAG)) ||
             headerByte == ZERO_HEAVY_MESSAGE_HEADER_FLAG ||
-            headerByte == AVAIL_MESSAGE_HEADER_FLAG;
+            headerByte == daBridge.DA_MESSAGE_HEADER_FLAG();
     }
 
     /// @dev    Form a hash of the data taken from the calldata
@@ -570,7 +558,7 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
     function formCallDataHash(
         bytes calldata data,
         uint256 afterDelayedMessagesRead
-    ) internal view returns (bytes32, IBridge.TimeBounds memory) {
+    ) internal returns (bytes32, IBridge.TimeBounds memory) {
         uint256 fullDataLen = HEADER_LENGTH + data.length;
         if (fullDataLen > maxDataSize) revert DataTooLarge(fullDataLen, maxDataSize);
 
@@ -593,28 +581,8 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
                 // we skip the first byte, then read the next 32 bytes for the keyset
                 bytes32 dasKeysetHash = bytes32(data[1:33]);
                 if (!dasKeySetInfo[dasKeysetHash].isValidKeyset) revert NoSuchKeyset(dasKeysetHash);
-            }
-            // Avail batch expect to have the type byte set, followed by
-            if (data[0] & AVAIL_MESSAGE_HEADER_FLAG != 0 && data.length >= 100) {
-                // console.logString("Avail header found");
-                BlobPointer memory blobPointer;
-                (
-                    blobPointer.blockHeight,
-                    blobPointer.extrinsicIndex,
-                    blobPointer.dasTreeRootHash,
-                    blobPointer.blobProof
-                ) = abi.decode(data[1:], (uint32, uint32, bytes32, BlobProof));
-
-                if (
-                    !MerkleProof.verify(
-                        blobPointer.blobProof.leafProof,
-                        blobPointer.blobProof.dataRoot,
-                        blobPointer.blobProof.leaf
-                    )
-                ) revert BatchDataValidationForAvailDAFailed(blobPointer.blobProof.leaf);
-
-                // Not included this event as this function declared as view
-                //emit validateBatchDataOverAvailDA(blobPointer.merkleProofInput);
+            } else if (data[0] & daBridge.DA_MESSAGE_HEADER_FLAG() != 0 && data.length >= 100) {
+                if (daBridge.verifyBatchAttestation(data)) revert BadDABatchAttestation(data[0]);
             }
         }
         return (keccak256(bytes.concat(header, data)), timeBounds);

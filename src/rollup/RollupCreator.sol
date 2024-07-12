@@ -27,6 +27,7 @@ contract RollupCreator is Ownable {
         address adminProxy,
         address sequencerInbox,
         address bridge,
+        address dabridge,
         address upgradeExecutor,
         address validatorUtils,
         address validatorWalletCreator
@@ -107,14 +108,12 @@ contract RollupCreator is Ownable {
      *          - dataHashReader The address of the data hash reader used to read blob hashes
      * @return The address of the newly created rollup
      */
-    function createRollup(RollupDeploymentParams memory deployParams)
-        public
-        payable
-        returns (address)
-    {
+    function createRollup(
+        RollupDeploymentParams memory deployParams
+    ) public payable returns (address) {
         {
             // Make sure the immutable maxDataSize is as expected
-            (, ISequencerInbox ethSequencerInbox, IInboxBase ethInbox, , ) = bridgeCreator
+            (, ISequencerInbox ethSequencerInbox, IInboxBase ethInbox, , , ) = bridgeCreator
                 .ethBasedTemplates();
             require(
                 deployParams.maxDataSize == ethSequencerInbox.maxDataSize(),
@@ -122,7 +121,7 @@ contract RollupCreator is Ownable {
             );
             require(deployParams.maxDataSize == ethInbox.maxDataSize(), "I_MAX_DATA_SIZE_MISMATCH");
 
-            (, ISequencerInbox erc20SequencerInbox, IInboxBase erc20Inbox, , ) = bridgeCreator
+            (, ISequencerInbox erc20SequencerInbox, IInboxBase erc20Inbox, , , ) = bridgeCreator
                 .erc20BasedTemplates();
             require(
                 deployParams.maxDataSize == erc20SequencerInbox.maxDataSize(),
@@ -225,6 +224,7 @@ contract RollupCreator is Ownable {
             address(proxyAdmin),
             address(bridgeContracts.sequencerInbox),
             address(bridgeContracts.bridge),
+            address(bridgeContracts.dabridge),
             address(upgradeExecutor),
             address(validatorUtils),
             address(validatorWalletCreator)
@@ -232,10 +232,10 @@ contract RollupCreator is Ownable {
         return address(rollup);
     }
 
-    function _deployUpgradeExecutor(address rollupOwner, ProxyAdmin proxyAdmin)
-        internal
-        returns (address)
-    {
+    function _deployUpgradeExecutor(
+        address rollupOwner,
+        ProxyAdmin proxyAdmin
+    ) internal returns (address) {
         IUpgradeExecutor upgradeExecutor = IUpgradeExecutor(
             address(
                 new TransparentUpgradeableProxy(

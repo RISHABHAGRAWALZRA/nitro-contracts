@@ -15,7 +15,7 @@ import "../rollup/ERC20RollupEventInbox.sol";
 import "../bridge/ERC20Outbox.sol";
 
 import "../bridge/IBridge.sol";
-import "../data-availability/IAvailDABridge.sol";
+import "../data-availability/IDABridge.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
@@ -32,6 +32,7 @@ contract BridgeCreator is Ownable {
         IInboxBase inbox;
         IRollupEventInbox rollupEventInbox;
         IOutbox outbox;
+        IDABridge dabridge;
     }
 
     constructor(
@@ -60,6 +61,11 @@ contract BridgeCreator is Ownable {
         frame.bridge = IBridge(
             address(new TransparentUpgradeableProxy(address(templates.bridge), adminProxy, ""))
         );
+
+        frame.dabridge = IDABridge(
+            address(new TransparentUpgradeableProxy(address(templates.dabridge), adminProxy, ""))
+        );
+
         frame.sequencerInbox = ISequencerInbox(
             address(
                 new TransparentUpgradeableProxy(address(templates.sequencerInbox), adminProxy, "")
@@ -100,7 +106,7 @@ contract BridgeCreator is Ownable {
         frame.sequencerInbox.initialize(
             IBridge(frame.bridge),
             maxTimeVariation,
-            IAvailDABridge(0x9378F9E35ff46a131406FEb7a226F7da4395DB48)
+            IDABridge(frame.dabridge)
         );
         frame.inbox.initialize(frame.bridge, frame.sequencerInbox);
         frame.rollupEventInbox.initialize(frame.bridge);
