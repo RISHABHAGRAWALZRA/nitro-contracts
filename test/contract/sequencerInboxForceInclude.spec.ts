@@ -277,12 +277,16 @@ describe('SequencerInboxForceInclude', async () => {
       .connect(user)
     await bridge.initialize(rollup.address)
 
-    await sequencerInbox.initialize(bridgeProxy.address, {
-      delayBlocks: maxDelayBlocks,
-      delaySeconds: maxDelayTime,
-      futureBlocks: 10,
-      futureSeconds: 3000,
-    }, "0x0000000000000000000000000000000000000000")
+    await sequencerInbox.initialize(
+      bridgeProxy.address,
+      {
+        delayBlocks: maxDelayBlocks,
+        delaySeconds: maxDelayTime,
+        futureBlocks: 10,
+        futureSeconds: 3000,
+      },
+      '0x0000000000000000000000000000000000000000'
+    )
 
     await (
       await sequencerInbox
@@ -354,7 +358,9 @@ describe('SequencerInboxForceInclude', async () => {
         ethers.constants.AddressZero,
         seqReportedMessageSubCount,
         seqReportedMessageSubCount.add(10),
-        { gasLimit: 10000000 }
+        {
+          gasLimit: 10000000
+        }
       )
     ).wait()
   })
@@ -397,16 +403,16 @@ describe('SequencerInboxForceInclude', async () => {
 
     await sequencerInbox
       .connect(batchPoster)
-      [
-        'addSequencerL2BatchFromOrigin(uint256,bytes,uint256,address,uint256,uint256)'
-      ](
-        0,
-        '0x',
-        0,
-        ethers.constants.AddressZero,
-        0,
-        ethers.constants.MaxUint256
-      )
+      .functions[
+      'addSequencerL2BatchFromOrigin(uint256,bytes,uint256,address,uint256,uint256)'
+    ](
+      0,
+      '0x',
+      0,
+      ethers.constants.AddressZero,
+      0,
+      ethers.constants.MaxUint256
+    )
 
     const delayedTx = await sendDelayedTx(
       user,

@@ -190,7 +190,7 @@ export async function deployAllContracts(
 async function deployDABridge(bridge: string, signer: any, args: any): Promise<Contract> {
   switch (bridge) {
     case "Avail":
-      return await deployContract("AvailBridge", signer, args)
+      return await deployContract("AvailDABridge", signer, args)
     default:
       return Promise.resolve(new ethers.Contract("0x0000000000000000000000000000000000000000", [], ethers.getDefaultProvider()))
   }

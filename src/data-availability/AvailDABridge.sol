@@ -4,8 +4,7 @@
 
 pragma solidity ^0.8.4;
 import "./IDABridge.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 contract AvailDABridge is IDABridge {
     struct BlobProof {
         bytes32 dataRoot;
@@ -47,7 +46,7 @@ contract AvailDABridge is IDABridge {
     //     uint256 leafIndex;
     // }
 
-    bytes1 public constant AVAIL_MESSAGE_HEADER_FLAG = 0x0a;
+    bytes1 constant AVAIL_MESSAGE_HEADER_FLAG = 0x0a;
 
     function DA_MESSAGE_HEADER_FLAG() external pure returns (bytes1) {
         return AVAIL_MESSAGE_HEADER_FLAG;
@@ -55,31 +54,31 @@ contract AvailDABridge is IDABridge {
 
     function verifyBatchAttestation(bytes calldata data) external view returns (bool) {
         // console.logString("Avail header found");
-        BlobPointer memory blobPointer;
-        (
-            blobPointer.blockHeight,
-            blobPointer.extrinsicIndex,
-            blobPointer.dasTreeRootHash,
-            blobPointer.blobProof
-        ) = abi.decode(data[1:], (uint32, uint32, bytes32, BlobProof));
+        // BlobPointer memory blobPointer;
+        // (
+        //     blobPointer.blockHeight,
+        //     blobPointer.extrinsicIndex,
+        //     blobPointer.dasTreeRootHash,
+        //     blobPointer.blobProof
+        // ) = abi.decode(data[1:], (uint32, uint32, bytes32, BlobProof));
 
-        bytes32 leaf = keccak256(abi.encode(blobPointer.blobProof.leaf));
+        // bytes32 leaf = keccak256(abi.encode(blobPointer.blobProof.leaf));
 
-        // console.logBytes32(blobPointer.blobProof.blobRoot);
-        // console.logBytes32(blobPointer.blobProof.leaf);
-        // for (uint256 i = 0; i < blobPointer.blobProof.leafProof.length; i++) {
-        //     console.logBytes32(blobPointer.blobProof.leafProof[i]);
-        // }
-        // console.logBytes32(leaf);
+        // // console.logBytes32(blobPointer.blobProof.blobRoot);
+        // // console.logBytes32(blobPointer.blobProof.leaf);
+        // // for (uint256 i = 0; i < blobPointer.blobProof.leafProof.length; i++) {
+        // //     console.logBytes32(blobPointer.blobProof.leafProof[i]);
+        // // }
+        // // console.logBytes32(leaf);
 
-        bool res = verifySha2Memory(
-            blobPointer.blobProof.leafProof,
-            blobPointer.blobProof.blobRoot,
-            blobPointer.blobProof.leafIndex,
-            blobPointer.blobProof.leaf
-        );
+        // bool res = verifySha2Memory(
+        //     blobPointer.blobProof.leafProof,
+        //     blobPointer.blobProof.blobRoot,
+        //     blobPointer.blobProof.leafIndex,
+        //     blobPointer.blobProof.leaf
+        // );
 
-        // console.logBool(res);
+        //console.logBool(res);
         //return !res;
         return false;
 

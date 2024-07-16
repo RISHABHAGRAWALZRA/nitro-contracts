@@ -22,6 +22,7 @@ interface RollupCreatedEvent {
     adminProxy: string
     sequencerInbox: string
     bridge: string
+    dabridge: string
     validatorUtils: string
     validatorWalletCreator: string
   }
@@ -109,6 +110,7 @@ export async function createRollup(feeToken?: string) {
       const adminProxy = rollupCreatedEvent.args?.adminProxy
       const sequencerInbox = rollupCreatedEvent.args?.sequencerInbox
       const bridge = rollupCreatedEvent.args?.bridge
+      const dabridge = rollupCreatedEvent.args?.dabridge
       const validatorUtils = rollupCreatedEvent.args?.validatorUtils
       const validatorWalletCreator =
         rollupCreatedEvent.args?.validatorWalletCreator
@@ -148,6 +150,7 @@ export async function createRollup(feeToken?: string) {
       console.log('AdminProxy Contract created at address:', adminProxy)
       console.log('SequencerInbox (proxy) created at address:', sequencerInbox)
       console.log('Bridge (proxy) Contract created at address:', bridge)
+      console.log('DABridge (proxy) Contract created at address:', dabridge)
       console.log('ValidatorUtils Contract created at address:', validatorUtils)
       console.log(
         'ValidatorWalletCreator Contract created at address:',
