@@ -183,6 +183,14 @@ module.exports = {
           browserURL: 'https://sepolia-explorer.arbitrum.io/',
         },
       },
+      {
+        network: 'baseSepolia',
+        chainId: 84532,
+        urls: {
+          apiURL: 'https://api-sepolia.basescan.org/api',
+          browserURL: '	https://sepolia-explorer.base.org',
+        }
+      }
     ],
   },
   mocha: {
