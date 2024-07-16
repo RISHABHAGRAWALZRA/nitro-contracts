@@ -139,7 +139,7 @@ module.exports = {
     geth: {
       url: 'http://localhost:8545',
     },
-    baseSpolia: {
+    baseSepolia: {
       url: 'https://sepolia.base.org',
       accounts: process.env['DEVNET_PRIVKEY']
         ? [process.env['DEVNET_PRIVKEY']]
