@@ -100,7 +100,7 @@ contract BridgeCreator is Ownable {
         frame.sequencerInbox.initialize(
             IBridge(frame.bridge),
             maxTimeVariation,
-            IAvailDABridge(0xd7000aA5B9142C70b183E4956b6eAC23dF4d3aAc)
+            IAvailDABridge(0x9378F9E35ff46a131406FEb7a226F7da4395DB48)
         );
         frame.inbox.initialize(frame.bridge, frame.sequencerInbox);
         frame.rollupEventInbox.initialize(frame.bridge);
