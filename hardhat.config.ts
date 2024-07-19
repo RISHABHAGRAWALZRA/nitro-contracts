@@ -156,7 +156,7 @@ module.exports = {
       nova: process.env['NOVA_ARBISCAN_API_KEY'],
       arbGoerliRollup: process.env['ARBISCAN_API_KEY'],
       arbSepolia: process.env['ARBISCAN_API_KEY'],
-      baseSepolia: process.env['ETHERSCAN_API_KEY']
+      baseSepolia: process.env['BASESCAN_API_KEY']
     },
     customChains: [
       {
