@@ -24,6 +24,7 @@ contract AvailDABridge is IDABridge {
         uint32 blockHeight;
         uint32 extrinsicIndex;
         bytes32 dasTreeRootHash;
+        bytes32 blobDataKeccak256H;
         BlobProof blobProof;
     }
 
@@ -54,13 +55,22 @@ contract AvailDABridge is IDABridge {
 
     function verifyBatchAttestation(bytes calldata data) external view returns (bool) {
         // console.logString("Avail header found");
-        // BlobPointer memory blobPointer;
-        // (
-        //     blobPointer.blockHeight,
-        //     blobPointer.extrinsicIndex,
-        //     blobPointer.dasTreeRootHash,
-        //     blobPointer.blobProof
-        // ) = abi.decode(data[1:], (uint32, uint32, bytes32, BlobProof));
+        BlobPointer memory blobPointer;
+        (
+            blobPointer.blockHeight,
+            blobPointer.extrinsicIndex,
+            blobPointer.dasTreeRootHash,
+            blobPointer.blobDataKeccak256H,
+            blobPointer.blobProof
+        ) = abi.decode(data[1:], (uint32, uint32, bytes32, bytes32, BlobProof));
+
+        require(
+            keccak256(abi.encode(blobPointer.blobDataKeccak256H)) == blobPointer.blobProof.leaf,
+            "Squencer batch data keccak256H preimage is not matching with the blobProof commitment"
+        );
+
+        // For Phase 1 of Optimistic DA verification, the blobProof is not getting verified
+        return false;
 
         // bytes32 leaf = keccak256(abi.encode(blobPointer.blobProof.leaf));
 
@@ -71,7 +81,7 @@ contract AvailDABridge is IDABridge {
         // // }
         // // console.logBytes32(leaf);
 
-        // bool res = verifySha2Memory(
+        // bool res = verifyMemory(
         //     blobPointer.blobProof.leafProof,
         //     blobPointer.blobProof.blobRoot,
         //     blobPointer.blobProof.leafIndex,
@@ -80,7 +90,6 @@ contract AvailDABridge is IDABridge {
 
         //console.logBool(res);
         //return !res;
-        return false;
 
         // Not included this event as this function declared as view
         //emit validatedBatchAttestationOverDA(blobPointer.blobProof.leaf);
