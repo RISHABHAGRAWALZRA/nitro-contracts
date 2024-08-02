@@ -65,7 +65,7 @@ contract AvailDABridge is IDABridge {
         ) = abi.decode(data[1:], (uint32, uint32, bytes32, bytes32, BlobProof));
 
         require(
-            keccak256(abi.encode(blobPointer.blobDataKeccak256H)) == blobPointer.blobProof.leaf,
+            blobPointer.blobDataKeccak256H == blobPointer.blobProof.leaf,
             "Squencer batch data keccak256H preimage is not matching with the blobProof commitment"
         );
 
