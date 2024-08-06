@@ -93,6 +93,10 @@ export async function deployAllContracts(
   const isOnArb = await _isRunningOnArbitrum(signer)
 
   const ethBridge = await deployContract('Bridge', signer, [])
+
+  //Deployment of DA Bridge
+  const daBridge = await deployDABridge("Avail", signer, [])
+
   const reader4844 = isOnArb
     ? ethers.constants.AddressZero
     : (await Toolkit4844.deployReader4844(signer)).address
@@ -132,6 +136,7 @@ export async function deployAllContracts(
       ethInbox.address,
       ethRollupEventInbox.address,
       ethOutbox.address,
+      daBridge.address,
     ],
     [
       erc20Bridge.address,
@@ -139,6 +144,7 @@ export async function deployAllContracts(
       erc20Inbox.address,
       erc20RollupEventInbox.address,
       erc20Outbox.address,
+      daBridge.address,
     ],
   ])
   const prover0 = await deployContract('OneStepProver0', signer)
@@ -177,6 +183,16 @@ export async function deployAllContracts(
     validatorWalletCreator,
     rollupCreator,
     deployHelper,
+  }
+}
+
+
+async function deployDABridge(bridge: string, signer: any, args: any): Promise<Contract> {
+  switch (bridge) {
+    case "Avail":
+      return await deployContract("AvailDABridge", signer, args)
+    default:
+      return Promise.resolve(new ethers.Contract("0x0000000000000000000000000000000000000000", [], ethers.getDefaultProvider()))
   }
 }
 
