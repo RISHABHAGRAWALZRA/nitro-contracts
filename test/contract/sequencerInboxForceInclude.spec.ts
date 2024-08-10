@@ -196,9 +196,7 @@ describe('SequencerInboxForceInclude', async () => {
       messageDataHash
     )
     if (expectedErrorType) {
-      await expect(forceInclusionTx).to.be.revertedWith(
-        `reverted with custom error '${expectedErrorType}()'`
-      )
+      await expect(forceInclusionTx).to.be.revertedWith(expectedErrorType)
     } else {
       await (await forceInclusionTx).wait()
 
@@ -627,7 +625,7 @@ describe('SequencerInboxForceInclude', async () => {
         ethers.constants.AddressZero,
         '0x'
       )
-    ).to.revertedWith('NotForked()')
+    ).to.revertedWith('NotForked')
   })
 
   it('should fail to call sendUnsignedTransactionToFork', async function () {
@@ -641,14 +639,14 @@ describe('SequencerInboxForceInclude', async () => {
         0,
         '0x'
       )
-    ).to.revertedWith('NotForked()')
+    ).to.revertedWith('NotForked')
   })
 
   it('should fail to call sendWithdrawEthToFork', async function () {
     const { inbox } = await setupSequencerInbox()
     await expect(
       inbox.sendWithdrawEthToFork(0, 0, 0, 0, ethers.constants.AddressZero)
-    ).to.revertedWith('NotForked()')
+    ).to.revertedWith('NotForked')
   })
 
   it('can upgrade Inbox', async () => {
