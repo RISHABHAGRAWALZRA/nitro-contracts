@@ -53,10 +53,10 @@ contract BridgeCreator is Ownable {
         emit ERC20TemplatesUpdated();
     }
 
-    function _createBridge(
-        address adminProxy,
-        BridgeContracts storage templates
-    ) internal returns (BridgeContracts memory) {
+    function _createBridge(address adminProxy, BridgeContracts storage templates)
+        internal
+        returns (BridgeContracts memory)
+    {
         BridgeContracts memory frame;
         frame.bridge = IBridge(
             address(new TransparentUpgradeableProxy(address(templates.bridge), adminProxy, ""))

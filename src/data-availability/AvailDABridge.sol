@@ -4,6 +4,7 @@
 
 pragma solidity ^0.8.4;
 import "./IDABridge.sol";
+
 //import "hardhat/console.sol";
 contract AvailDABridge is IDABridge {
     struct BlobProof {
@@ -47,8 +48,9 @@ contract AvailDABridge is IDABridge {
     //     uint256 leafIndex;
     // }
 
-    bytes1 constant AVAIL_MESSAGE_HEADER_FLAG = 0x0a;
+    bytes1 public constant AVAIL_MESSAGE_HEADER_FLAG = 0x0a;
 
+    // solhint-disable-next-line func-name-mixedcase
     function DA_MESSAGE_HEADER_FLAG() external pure returns (bytes1) {
         return AVAIL_MESSAGE_HEADER_FLAG;
     }

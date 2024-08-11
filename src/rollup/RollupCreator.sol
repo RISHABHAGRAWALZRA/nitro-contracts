@@ -108,9 +108,11 @@ contract RollupCreator is Ownable {
      *          - dataHashReader The address of the data hash reader used to read blob hashes
      * @return The address of the newly created rollup
      */
-    function createRollup(
-        RollupDeploymentParams memory deployParams
-    ) public payable returns (address) {
+    function createRollup(RollupDeploymentParams memory deployParams)
+        public
+        payable
+        returns (address)
+    {
         {
             // Make sure the immutable maxDataSize is as expected
             (, ISequencerInbox ethSequencerInbox, IInboxBase ethInbox, , , ) = bridgeCreator
@@ -232,10 +234,10 @@ contract RollupCreator is Ownable {
         return address(rollup);
     }
 
-    function _deployUpgradeExecutor(
-        address rollupOwner,
-        ProxyAdmin proxyAdmin
-    ) internal returns (address) {
+    function _deployUpgradeExecutor(address rollupOwner, ProxyAdmin proxyAdmin)
+        internal
+        returns (address)
+    {
         IUpgradeExecutor upgradeExecutor = IUpgradeExecutor(
             address(
                 new TransparentUpgradeableProxy(

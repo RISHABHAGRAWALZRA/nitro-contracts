@@ -21,5 +21,5 @@ interface IDABridge {
      */
     function verifyBatchAttestation(bytes calldata data) external returns (bool);
 
-    event validatedBatchAttestationOverDA(bytes32 indexed blobHash);
+    event ValidatedBatchAttestationOverDA(bytes32 indexed blobHash);
 }
