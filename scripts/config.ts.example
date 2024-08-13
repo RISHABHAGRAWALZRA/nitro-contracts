@@ -2,7 +2,9 @@ import { ethers } from 'ethers'
 
 // 90% of Geth's 128KB tx size limit, leaving ~13KB for proving
 // This need to be adjusted for Orbit chains
-export const maxDataSize = 117964
+
+// use maxDataSize=117964 for mainnet
+export const maxDataSize =104857
 
 export const config = {
   rollupConfig: {
