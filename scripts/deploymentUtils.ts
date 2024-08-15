@@ -103,7 +103,7 @@ export async function deployAllContracts(
 
   const ethBridge = await deployContract('Bridge', signer, [], verify)
   //Deployment of DA Bridge
-  const daBridge = await deployDABridge("Avail", signer, [])
+  const daBridge = await deployDABridge("Avail", signer, [], verify)
   const reader4844 = isOnArb
     ? ethers.constants.AddressZero
     : (await Toolkit4844.deployReader4844(signer)).address
@@ -250,10 +250,10 @@ export async function deployAllContracts(
 }
 
 
-async function deployDABridge(bridge: string, signer: any, args: any): Promise<Contract> {
+async function deployDABridge(bridge: string, signer: any, args: any, verify: boolean = true): Promise<Contract> {
   switch (bridge) {
     case "Avail":
-      return await deployContract("AvailDABridge", signer, args)
+      return await deployContract("AvailDABridge", signer, args, verify)
     default:
       return Promise.resolve(new ethers.Contract("0x0000000000000000000000000000000000000000", [], ethers.getDefaultProvider()))
   }
