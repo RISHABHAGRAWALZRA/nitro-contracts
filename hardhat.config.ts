@@ -31,7 +31,7 @@ const solidity = {
       settings: {
         optimizer: {
           enabled: true,
-          runs: 20,
+          runs: 0,
         },
       },
     },
@@ -215,4 +215,7 @@ module.exports = {
     outDir: 'build/types',
     target: 'ethers-v5',
   },
+  contractSizer: {
+    strict: true
+  }
 }
