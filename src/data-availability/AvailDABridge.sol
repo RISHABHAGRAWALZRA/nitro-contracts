@@ -22,6 +22,7 @@ contract AvailDABridge is IDABridge {
         bytes32 leaf;
     }
     struct BlobPointer {
+        uint8 version;
         uint32 blockHeight;
         uint32 extrinsicIndex;
         bytes32 dasTreeRootHash;
@@ -56,20 +57,23 @@ contract AvailDABridge is IDABridge {
     }
 
     function verifyBatchAttestation(bytes calldata data) external view returns (bool) {
+        uint8 blobPointerVersion = abi.decode(data[1:], (uint8));
+        if (blobPointerVersion == 2) {
+            BlobPointer memory blobPointer;
+            (
+                blobPointer.version,
+                blobPointer.blockHeight,
+                blobPointer.extrinsicIndex,
+                blobPointer.dasTreeRootHash,
+                blobPointer.blobDataKeccak256H,
+                blobPointer.blobProof
+            ) = abi.decode(data[1:], (uint8, uint32, uint32, bytes32, bytes32, BlobProof));
+            require(
+                blobPointer.blobDataKeccak256H == blobPointer.blobProof.leaf,
+                "Squencer batch data keccak256H preimage is not matching with the blobProof commitment"
+            );
+        }
         // console.logString("Avail header found");
-        BlobPointer memory blobPointer;
-        (
-            blobPointer.blockHeight,
-            blobPointer.extrinsicIndex,
-            blobPointer.dasTreeRootHash,
-            blobPointer.blobDataKeccak256H,
-            blobPointer.blobProof
-        ) = abi.decode(data[1:], (uint32, uint32, bytes32, bytes32, BlobProof));
-
-        require(
-            blobPointer.blobDataKeccak256H == blobPointer.blobProof.leaf,
-            "Squencer batch data keccak256H preimage is not matching with the blobProof commitment"
-        );
 
         // For Phase 1 of Optimistic DA verification, the blobProof is not getting verified
         return false;
