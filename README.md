@@ -1,3 +1,7 @@
+> [!WARNING]
+> The code audit is not completed yet. Caution should be taken when used in production scenarios. <br/>
+> ~ [Avail Team](https://www.availproject.org/)
+
 # Arbitrum Nitro Rollup Contracts
 
 This is the package with the smart contract code that powers Arbitrum Nitro.
