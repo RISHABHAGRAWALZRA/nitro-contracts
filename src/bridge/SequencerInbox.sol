@@ -60,8 +60,6 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
 
     IBridge public bridge;
 
-    IDABridge public daBridge;
-
     /// @inheritdoc ISequencerInbox
     uint256 public constant HEADER_LENGTH = 40;
 
@@ -127,6 +125,9 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
     bool internal immutable hostChainIsArbitrum = ArbitrumChecker.runningOnArbitrum();
     // True if the chain this SequencerInbox is deployed on uses custom fee token
     bool public immutable isUsingFeeToken;
+
+    // added in last to keep away from storage clash for upgrade
+    IDABridge public daBridge;
 
     constructor(
         uint256 _maxDataSize,
@@ -210,6 +211,15 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
         // Can be zero if there is no da bridge requirement
         // if (daBridge_ == IDABridge(address(0))) revert HadZeroInit();
         daBridge = daBridge_;
+    }
+
+    function initializeDABridge(address daBridge_) external onlyDelegated {
+        //initialise DA bridge for DA attestation verification
+        if (IDABridge(daBridge) != IDABridge(address(0))) revert AlreadyInit();
+
+        // Can be zero if there is no da bridge requirement
+        // if (daBridge_ == IDABridge(address(0))) revert HadZeroInit();
+        daBridge = IDABridge(daBridge_);
     }
 
     /// @notice Allows the rollup owner to sync the rollup address
