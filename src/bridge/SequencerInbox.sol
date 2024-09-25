@@ -608,7 +608,7 @@ contract SequencerInbox is DelegateCallAware, GasRefundEnabled, ISequencerInbox 
                 bytes32 dasKeysetHash = bytes32(data[1:33]);
                 if (!dasKeySetInfo[dasKeysetHash].isValidKeyset) revert NoSuchKeyset(dasKeysetHash);
             } else if (data[0] & daBridge.DA_MESSAGE_HEADER_FLAG() != 0 && data.length >= 100) {
-                if (daBridge.verifyBatchAttestation(data)) revert BadDABatchAttestation(data[0]);
+                if (!daBridge.verifyBatchAttestation(data)) revert BadDABatchAttestation(data[0]);
             }
         }
         return (keccak256(bytes.concat(header, data)), timeBounds);

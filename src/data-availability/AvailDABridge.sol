@@ -56,27 +56,56 @@ contract AvailDABridge is IDABridge {
         return AVAIL_MESSAGE_HEADER_FLAG;
     }
 
+    function decodeBlobPointer(bytes calldata data)
+        public
+        pure
+        returns (
+            uint8,
+            uint32,
+            uint32,
+            bytes32,
+            bytes32,
+            BlobProof memory
+        )
+    {
+        return abi.decode(data[1:], (uint8, uint32, uint32, bytes32, bytes32, BlobProof));
+    }
+
     function verifyBatchAttestation(bytes calldata data) external view returns (bool) {
         uint8 blobPointerVersion = abi.decode(data[1:], (uint8));
         if (blobPointerVersion == 2) {
             BlobPointer memory blobPointer;
-            (
-                blobPointer.version,
-                blobPointer.blockHeight,
-                blobPointer.extrinsicIndex,
-                blobPointer.dasTreeRootHash,
-                blobPointer.blobDataKeccak256H,
-                blobPointer.blobProof
-            ) = abi.decode(data[1:], (uint8, uint32, uint32, bytes32, bytes32, BlobProof));
+            try this.decodeBlobPointer(data) returns (
+                uint8 version,
+                uint32 blockHeight,
+                uint32 extrinsicIndex,
+                bytes32 dasTreeRootHash,
+                bytes32 blobDataKeccak256H,
+                BlobProof memory blobProof
+            ) {
+                // Successfully decoded, assign values
+                blobPointer.version = version;
+                blobPointer.blockHeight = blockHeight;
+                blobPointer.extrinsicIndex = extrinsicIndex;
+                blobPointer.dasTreeRootHash = dasTreeRootHash;
+                blobPointer.blobDataKeccak256H = blobDataKeccak256H;
+                blobPointer.blobProof = blobProof;
+            } catch {
+                // Revert with a custom error message when `abi.decode` fails
+                revert("Error: BlobPointer ABI decode failed, invalid data format.");
+            }
+
             require(
                 blobPointer.blobDataKeccak256H == blobPointer.blobProof.leaf,
-                "Squencer batch data keccak256H preimage is not matching with the blobProof commitment"
+                "Sequencer batch data keccak256H preimage is not matching with the blobProof commitment"
             );
+            return true;
+        } else {
+            revert("Error: Avail BlobPointer version is not supported");
         }
         // console.logString("Avail header found");
 
         // For Phase 1 of Optimistic DA verification, the blobProof is not getting verified
-        return false;
 
         // bytes32 leaf = keccak256(abi.encode(blobPointer.blobProof.leaf));
 
