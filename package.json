@@ -1,12 +1,12 @@
 {
-  "name": "@arbitrum/nitro-contracts",
-  "version": "2.1.0",
+  "name": "@avail-project/avail-nitro-contracts",
+  "version": "2.1.0-upstream-2.1.0",
   "description": "Layer 2 precompiles and rollup for Arbitrum Nitro",
   "author": "Offchain Labs, Inc.",
   "license": "BUSL-1.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/offchainlabs/nitro-contracts.git"
+    "url": "git+https://github.com/availproject/nitro-contracts.git"
   },
   "files": [
     "src/",
@@ -15,7 +15,7 @@
     "out/yul/Reader4844.yul/Reader4844.json"
   ],
   "bugs": {
-    "url": "https://github.com/offchainlabs/nitro-contracts/issues"
+    "url": "https://github.com/availproject/nitro-contracts/issues"
   },
   "scripts": {
     "audit:ci": "audit-ci --config ./audit-ci.jsonc",
