@@ -4,6 +4,7 @@ pragma solidity ^0.8.4;
 import "forge-std/Test.sol";
 import "./util/TestUtil.sol";
 import "../../src/bridge/Bridge.sol";
+import "../../src/data-availability/AvailDABridge.sol";
 import "../../src/bridge/SequencerInbox.sol";
 import {ERC20Bridge} from "../../src/bridge/ERC20Bridge.sol";
 import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol";
@@ -67,6 +68,11 @@ contract SequencerInboxTest is Test {
         vm.prank(rollupOwner);
         bridge.setDelayedInbox(dummyInbox, true);
 
+        AvailDABridge dabridgeImpl = new AvailDABridge();
+        AvailDABridge dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(dabridgeImpl), proxyAdmin, ""))
+        );
+
         SequencerInbox seqInboxImpl = new SequencerInbox(
             maxDataSize,
             isArbHosted ? IReader4844(address(0)) : dummyReader4844,
@@ -75,7 +81,7 @@ contract SequencerInboxTest is Test {
         SequencerInbox seqInbox = SequencerInbox(
             address(new TransparentUpgradeableProxy(address(seqInboxImpl), proxyAdmin, ""))
         );
-        seqInbox.initialize(bridge, maxTimeVariation);
+        seqInbox.initialize(bridge, maxTimeVariation, dabridge);
 
         vm.prank(rollupOwner);
         seqInbox.setIsBatchPoster(tx.origin, true);
@@ -98,6 +104,11 @@ contract SequencerInboxTest is Test {
         vm.prank(rollupOwner);
         bridge.setDelayedInbox(dummyInbox, true);
 
+        AvailDABridge dabridgeImpl = new AvailDABridge();
+        AvailDABridge dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(dabridgeImpl), proxyAdmin, ""))
+        );
+
         /// this will result in 'hostChainIsArbitrum = true'
         vm.mockCall(
             address(100),
@@ -112,7 +123,7 @@ contract SequencerInboxTest is Test {
         SequencerInbox seqInbox = SequencerInbox(
             address(new TransparentUpgradeableProxy(address(seqInboxImpl), proxyAdmin, ""))
         );
-        seqInbox.initialize(bridge, maxTimeVariation);
+        seqInbox.initialize(bridge, maxTimeVariation, dabridge);
 
         vm.prank(rollupOwner);
         seqInbox.setIsBatchPoster(tx.origin, true);
@@ -278,9 +289,13 @@ contract SequencerInboxTest is Test {
         );
         _bridge.initialize(IOwnable(address(new RollupMock(rollupOwner))));
 
+        AvailDABridge _dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(new AvailDABridge()), proxyAdmin, ""))
+        );
+
         address seqInboxLogic = address(new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, false));
         SequencerInbox seqInboxProxy = SequencerInbox(TestUtil.deployProxy(seqInboxLogic));
-        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation);
+        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation, IDABridge(_dabridge));
 
         assertEq(seqInboxProxy.isUsingFeeToken(), false, "Invalid isUsingFeeToken");
         assertEq(address(seqInboxProxy.bridge()), address(_bridge), "Invalid bridge");
@@ -294,9 +309,13 @@ contract SequencerInboxTest is Test {
         address nativeToken = address(new ERC20PresetMinterPauser("Appchain Token", "App"));
         _bridge.initialize(IOwnable(address(new RollupMock(rollupOwner))), nativeToken);
 
+        AvailDABridge _dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(new AvailDABridge()), proxyAdmin, ""))
+        );
+
         address seqInboxLogic = address(new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, true));
         SequencerInbox seqInboxProxy = SequencerInbox(TestUtil.deployProxy(seqInboxLogic));
-        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation);
+        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation, IDABridge(_dabridge));
 
         assertEq(seqInboxProxy.isUsingFeeToken(), true, "Invalid isUsingFeeToken");
         assertEq(address(seqInboxProxy.bridge()), address(_bridge), "Invalid bridge");
@@ -309,11 +328,15 @@ contract SequencerInboxTest is Test {
         );
         _bridge.initialize(IOwnable(address(new RollupMock(rollupOwner))));
 
+        AvailDABridge _dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(new AvailDABridge()), proxyAdmin, ""))
+        );
+
         address seqInboxLogic = address(new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, true));
         SequencerInbox seqInboxProxy = SequencerInbox(TestUtil.deployProxy(seqInboxLogic));
 
         vm.expectRevert(abi.encodeWithSelector(NativeTokenMismatch.selector));
-        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation);
+        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation, IDABridge(_dabridge));
     }
 
     function testInitialize_revert_NativeTokenMismatch_FeeTokenEth() public {
@@ -323,11 +346,15 @@ contract SequencerInboxTest is Test {
         address nativeToken = address(new ERC20PresetMinterPauser("Appchain Token", "App"));
         _bridge.initialize(IOwnable(address(new RollupMock(rollupOwner))), nativeToken);
 
+        AvailDABridge _dabridge = AvailDABridge(
+            address(new TransparentUpgradeableProxy(address(new AvailDABridge()), proxyAdmin, ""))
+        );
+
         address seqInboxLogic = address(new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, false));
         SequencerInbox seqInboxProxy = SequencerInbox(TestUtil.deployProxy(seqInboxLogic));
 
         vm.expectRevert(abi.encodeWithSelector(NativeTokenMismatch.selector));
-        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation);
+        seqInboxProxy.initialize(IBridge(_bridge), maxTimeVariation, IDABridge(_dabridge));
     }
 
     function testAddSequencerL2BatchFromOrigin_ArbitrumHosted() public {

@@ -16,6 +16,7 @@ import "../../src/osp/OneStepProverHostIo.sol";
 import "../../src/osp/OneStepProofEntry.sol";
 import "../../src/mocks/UpgradeExecutorMock.sol";
 import "../../src/rollup/DeployHelper.sol";
+import "../../src/data-availability/AvailDABridge.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetFixedSupply.sol";
@@ -39,7 +40,8 @@ contract RollupCreatorTest is Test {
             sequencerInbox: new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, false),
             inbox: new Inbox(MAX_DATA_SIZE),
             rollupEventInbox: new RollupEventInbox(),
-            outbox: new Outbox()
+            outbox: new Outbox(),
+            dabridge: new AvailDABridge()
         });
     BridgeCreator.BridgeContracts public erc20BasedTemplates =
         BridgeCreator.BridgeContracts({
@@ -47,7 +49,8 @@ contract RollupCreatorTest is Test {
             sequencerInbox: new SequencerInbox(MAX_DATA_SIZE, dummyReader4844, true),
             inbox: new ERC20Inbox(MAX_DATA_SIZE),
             rollupEventInbox: new ERC20RollupEventInbox(),
-            outbox: new ERC20Outbox()
+            outbox: new ERC20Outbox(),
+            dabridge: new AvailDABridge()
         });
 
     /* solhint-disable func-name-mixedcase */
@@ -524,11 +527,7 @@ contract RollupCreatorTest is Test {
 }
 
 contract ProxyUpgradeAction {
-    function perform(
-        address admin,
-        address payable target,
-        address newLogic
-    ) public payable {
+    function perform(address admin, address payable target, address newLogic) public payable {
         ProxyAdmin(admin).upgrade(TransparentUpgradeableProxy(target), newLogic);
     }
 }
